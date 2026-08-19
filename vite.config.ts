@@ -206,6 +206,8 @@ function vitePluginStorageProxy(): Plugin {
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
 
 export default defineConfig({
+  // GitHub Pages serve este repositório em /editor-markdown/; o preview local permanece na raiz.
+  base: process.env.VITE_BASE_PATH || "/",
   plugins,
   resolve: {
     alias: {

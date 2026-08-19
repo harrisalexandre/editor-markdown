@@ -99,10 +99,12 @@ type PrintSettings = {
 
 type ImportEntry = { path: string; file: File };
 
-const BRAND_LOGO = "/manus-storage/caderno-colophon-logo_a0dc4c33.png";
-const WELCOME_IMAGE = "/manus-storage/editorial-workbench-welcome_606eee42.jpg";
-const DEFAULT_COVER = "/manus-storage/folio-abstract-cover_d8d1fef8.jpg";
-const PAPER_TEXTURE = "/manus-storage/printing-forms-texture_ffb0287d.jpg";
+// Oficina Editorial: no GitHub Pages, os recursos vivem em public/assets; no preview, usam o armazenamento do projeto.
+const pageAsset = (filename: string, manusPath: string) => import.meta.env.BASE_URL === "/" ? manusPath : `${import.meta.env.BASE_URL}assets/${filename}`;
+const BRAND_LOGO = pageAsset("caderno-colophon-logo.png", "/manus-storage/caderno-colophon-logo_a0dc4c33.png");
+const WELCOME_IMAGE = pageAsset("editorial-workbench-welcome.jpg", "/manus-storage/editorial-workbench-welcome_606eee42.jpg");
+const DEFAULT_COVER = pageAsset("folio-abstract-cover.jpg", "/manus-storage/folio-abstract-cover_d8d1fef8.jpg");
+const PAPER_TEXTURE = pageAsset("printing-forms-texture.jpg", "/manus-storage/printing-forms-texture_ffb0287d.jpg");
 
 const defaultPrintSettings: PrintSettings = {
   pageFormat: "A5",

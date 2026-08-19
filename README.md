@@ -1,19 +1,25 @@
 # Caderno — Editor Markdown de Livros
 
-**Caderno** é um aplicativo web client-side para organizar, revisar e montar livros a partir de um conjunto de arquivos Markdown. Ele foi pensado para autores e preparadores que precisam passar de capítulos em `.md` para uma prova de impressão sem enviar o manuscrito a um servidor.
+O **Caderno** é um ateliê digital para organizar, revisar e montar livros a partir de arquivos Markdown. O aplicativo funciona inteiramente no navegador: o manuscrito permanece na sessão local enquanto você edita capítulos, testa a ordem da leitura e prepara uma prova para impressão.
 
-## Fluxo de uso
+## Teste público
 
-Importe um arquivo `.zip` ou escolha uma pasta. O projeto pode conter um `index.json` com os metadados e a ordem dos capítulos, arquivos `.md` e uma pasta `assets/` com imagens. Caso não haja `index.json`, o Caderno organiza os Markdown por ordem alfanumérica e permite reordená-los por arrastar e soltar.
+Após a conclusão da publicação automática, a versão de teste ficará disponível em **[harrisalexandre.github.io/editor-markdown](https://harrisalexandre.github.io/editor-markdown/)**. A cada alteração enviada para a branch `main`, o fluxo de publicação compila o aplicativo e atualiza esse endereço.
 
-| Área | Função |
-| --- | --- |
-| **Editar** | Altera o texto Markdown, o título exibido e o ato de cada capítulo, com pré-visualização ao vivo. |
-| **Montagem** | Compõe capa, sumário, aberturas de ato e capítulos em páginas de prova. |
-| **Impressão** | Configura formato, margens, tipografia, entrelinha, recuo e elementos da montagem. |
-| **Exportar** | Baixa um capítulo em `.md`, o projeto inteiro em `.zip` ou abre o diálogo do navegador para salvar a prova como PDF. |
+> A primeira publicação pode levar alguns minutos depois do push. Se a página ainda não abrir, consulte a aba **Actions** do repositório e aguarde a execução `Deploy to GitHub Pages` terminar.
 
-## Estrutura de entrada recomendada
+## Roteiro de teste
+
+| Passo | O que fazer | Resultado esperado |
+| --- | --- | --- |
+| 1 | Abra o link público e escolha **Abrir livro-exemplo**. | A árvore de atos, o editor e a prova de leitura devem aparecer. |
+| 2 | Edite um parágrafo em Markdown. | A pré-visualização ao lado deve refletir a alteração imediatamente. |
+| 3 | Reordene capítulos pela alça de arrastar ou desmarque um capítulo. | A estrutura e a montagem devem respeitar a nova sequência e as inclusões. |
+| 4 | Envie um `.zip` com `index.json`, `.md` e `assets/`. | Título, autoria, atos, capítulos e imagens locais devem ser importados. |
+| 5 | Abra **Montagem** e depois **Impressão**. | Capa, sumário, aberturas de ato e páginas de capítulo devem responder às configurações. |
+| 6 | Clique em **Preparar prova** e escolha salvar como PDF no navegador. | A janela de impressão deve abrir com texto selecionável e páginas em formato de livro. |
+
+## Estrutura de arquivo recomendada
 
 ```text
 meu-livro.zip
@@ -26,7 +32,7 @@ meu-livro.zip
     └── mapa.png
 ```
 
-O `index.json` é opcional. Quando utilizado, deve seguir esta forma:
+O arquivo `index.json` é opcional. Caso exista, ele define metadados e a sequência da montagem:
 
 ```json
 {
@@ -39,14 +45,24 @@ O `index.json` é opcional. Quando utilizado, deve seguir esta forma:
 }
 ```
 
-As imagens Markdown podem usar caminhos relativos, como `![Mapa](assets/mapa.png)`. Durante a sessão, elas são resolvidas para URLs locais em memória e também são preservadas no ZIP exportado.
+As imagens podem ser referenciadas por caminhos relativos, como `![Mapa](assets/mapa.png)`. O Caderno as resolve em memória durante a sessão e preserva os arquivos no ZIP atualizado.
 
-## Desenvolvimento
+## Recursos incluídos
 
-Instale as dependências com `pnpm install` e inicie o ambiente local com `pnpm dev`. Execute `pnpm check` para a validação de tipos e `pnpm build` para gerar a versão de produção.
+O ambiente permite importar ZIP ou pasta, editar Markdown em preview ao vivo, criar/reordenar/incluir capítulos, alterar atos e títulos exibidos, baixar capítulos isolados e exportar o projeto completo. A área de montagem compõe folha de rosto, sumário, aberturas de ato e páginas de capítulo. As configurações de impressão ajustam tamanho de página, margens, tipografia, ritmo de leitura, cabeçalhos e numeração.
 
-> Os arquivos importados permanecem apenas no estado da sessão do navegador. Recarregar a página limpa o manuscrito que não foi exportado.
+## Desenvolvimento local
 
-## Limitação de paginação
+Instale as dependências com `pnpm install`, use `pnpm dev` para iniciar o ambiente de desenvolvimento e execute `pnpm check` para validar tipos. O comando abaixo cria a versão de produção com o mesmo caminho usado pelo GitHub Pages:
 
-A prova apresenta uma página por capítulo e por abertura de ato, além de estilos de impressão para A4, A5, Carta ou tamanho customizado. A numeração exibida é uma composição de prova; para uma paginação editorial definitiva, valide o PDF gerado pelo navegador conforme a impressora, o navegador e a fonte instalados no ambiente de destino.
+```bash
+VITE_BASE_PATH=/editor-markdown/ pnpm build
+```
+
+## Limitações conhecidas
+
+O estado do livro não é persistido após recarregar a página, portanto exporte o ZIP antes de sair. A paginação apresentada é uma prova visual com uma página por capítulo e por abertura de ato; a paginação definitiva deve ser conferida no PDF do navegador conforme fonte, sistema operacional e impressora usados.
+
+## Referência
+
+O repositório-fonte é [harrisalexandre/editor-markdown](https://github.com/harrisalexandre/editor-markdown). O fluxo de publicação utiliza GitHub Pages e é definido em `.github/workflows/deploy-pages.yml`.
