@@ -12,12 +12,12 @@ Após a conclusão da publicação automática, a versão de teste ficará dispo
 
 | Passo | O que fazer | Resultado esperado |
 | --- | --- | --- |
-| 1 | Abra o link público e escolha **Abrir livro-exemplo**. | A árvore de atos, o editor e a prova de leitura devem aparecer. |
+| 1 | Abra o link público e escolha **Novo livro** ou **Subir arquivo .zip**. | O editor deve abrir vazio ou importar somente o seu manuscrito real. |
 | 2 | Edite um parágrafo em Markdown. | A pré-visualização ao lado deve refletir a alteração imediatamente. |
 | 3 | Reordene capítulos pela alça de arrastar ou desmarque um capítulo. | A estrutura e a montagem devem respeitar a nova sequência e as inclusões. |
 | 4 | Envie um `.zip` com `index.json`, `.md` e `assets/`. | Título, autoria, atos, capítulos e imagens locais devem ser importados. |
 | 5 | Abra **Montagem** e depois **Impressão**. | Capa, sumário, aberturas de ato e páginas de capítulo devem responder às configurações. |
-| 6 | Clique em **Preparar prova** e escolha salvar como PDF no navegador. | A janela de impressão deve abrir com texto selecionável e páginas em formato de livro. |
+| 6 | Clique em **Preparar prova** ou use `Ctrl+P` e escolha salvar como PDF no navegador. | A janela de impressão deve abrir a composição completa, com texto selecionável e páginas em formato de livro. |
 
 ## Estrutura de arquivo recomendada
 

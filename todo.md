@@ -1,5 +1,7 @@
 # Publicação para teste — Caderno
 
+- [x] Fazer com que Preparar prova e Ctrl+P imprimam somente a composição completa do livro.
+- [x] Substituir o livro-exemplo por uma abertura vazia com as opções Novo livro e Subir arquivo .zip.
 - [x] Analisar o conteúdo anexado e identificar se o bloqueio depende de código ou de uma configuração externa.
 - [x] Configurar a base de produção para o caminho `/editor-markdown/` do GitHub Pages.
 - [x] Criar o fluxo de publicação que compila o aplicativo e entrega os arquivos estáticos ao GitHub Pages.

@@ -251,21 +251,14 @@ export default function Home() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const createdUrlsRef = useRef<string[]>([]);
   const [tab, setTab] = useState<Tab>("editar");
-  const [metadata, setMetadata] = useState<BookMeta>({
-    title: "Caderno de provas",
-    author: "Nome do autor",
-    description: "Um espaço para organizar capítulos, revisar a escrita e preparar a impressão.",
-  });
-  const [chapters, setChapters] = useState<Chapter[]>(SAMPLE_CHAPTERS);
+  const [hasProject, setHasProject] = useState(false);
+  const [metadata, setMetadata] = useState<BookMeta>({ title: "", author: "", description: "" });
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [assets, setAssets] = useState<StoredAsset[]>([]);
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({});
-  const [activeId, setActiveId] = useState(SAMPLE_CHAPTERS[0].id);
+  const [activeId, setActiveId] = useState("");
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [openActs, setOpenActs] = useState<Record<string, boolean>>({
-    "Prelúdio": true,
-    "Ato I — Matéria": true,
-    "Ato II — Forma": true,
-  });
+  const [openActs, setOpenActs] = useState<Record<string, boolean>>({});
   const [loadingImport, setLoadingImport] = useState(false);
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [settings, setSettings] = useState<PrintSettings>(defaultPrintSettings);
@@ -358,6 +351,7 @@ export default function Home() {
     setAssetUrls(nextAssetUrls);
     setActiveId(orderedChapters[0].id);
     setOpenActs(Object.fromEntries(groupChapters(orderedChapters).map((group) => [group.act, true])));
+    setHasProject(true);
     setTab("editar");
     toast.success(`${orderedChapters.length} arquivos de texto foram organizados no manuscrito.`);
   };
@@ -413,20 +407,25 @@ export default function Home() {
     else toast.error("Arraste um arquivo .zip. Para escolher uma pasta, use o botão “Escolher pasta”.");
   };
 
-  const createSampleBook = () => {
+  const createNewBook = () => {
     releaseAssetUrls();
-    setMetadata({
-      title: "Atlas das coisas guardadas",
-      author: "Aline Monteiro",
-      description: "Uma prova ficcional para experimentar a edição, a montagem e a impressão.",
-    });
-    setChapters(SAMPLE_CHAPTERS);
+    const firstChapter: Chapter = {
+      id: `capitulo-inicial-${Date.now()}`,
+      path: "capitulo-01.md",
+      title: "Capítulo 1",
+      act: "Manuscrito",
+      content: "",
+      included: true,
+    };
+    setMetadata({ title: "Novo livro", author: "", description: "" });
+    setChapters([firstChapter]);
     setAssets([]);
     setAssetUrls({});
-    setActiveId(SAMPLE_CHAPTERS[0].id);
-    setOpenActs({ "Prelúdio": true, "Ato I — Matéria": true, "Ato II — Forma": true });
+    setActiveId(firstChapter.id);
+    setOpenActs({ Manuscrito: true });
+    setHasProject(true);
     setTab("editar");
-    toast.success("Projeto de demonstração aberto. Você pode editar tudo nesta sessão.");
+    toast.success("Livro vazio criado. Dê um título e comece a escrever.");
   };
 
   const moveChapter = (dragId: string, targetId: string) => {
@@ -508,8 +507,66 @@ export default function Home() {
       toast.error("Selecione pelo menos um capítulo incluído para imprimir.");
       return;
     }
+    document.body.classList.add("printing-book");
     window.print();
   };
+
+  useEffect(() => {
+    const finishPrint = () => document.body.classList.remove("printing-book");
+    window.addEventListener("afterprint", finishPrint);
+    return () => {
+      window.removeEventListener("afterprint", finishPrint);
+      document.body.classList.remove("printing-book");
+    };
+  }, []);
+
+  useEffect(() => {
+    const capturePrintShortcut = (event: KeyboardEvent) => {
+      if (!hasProject || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "p") return;
+      event.preventDefault();
+      printBook();
+    };
+    window.addEventListener("keydown", capturePrintShortcut);
+    return () => window.removeEventListener("keydown", capturePrintShortcut);
+  }, [hasProject, chaptersForOutput]);
+
+  if (!hasProject) {
+    return (
+      <div className="start-shell">
+        <header className="start-header">
+          <div className="brand-lockup start-brand"><img src={BRAND_LOGO} alt="Símbolo Caderno" className="brand-symbol" /><div><span className="eyebrow">ATELIÊ DE LIVROS</span><strong>Caderno</strong></div></div>
+          <span className="start-status">PRONTO PARA UM MANUSCRITO</span>
+        </header>
+        <main className="start-main">
+          <section className="start-intro">
+            <span className="eyebrow">NOVA COMPOSIÇÃO</span>
+            <h1>Comece pelo<br /><em>manuscrito.</em></h1>
+            <p>Crie um livro vazio ou abra um projeto real em Markdown. Nada de conteúdo fictício: você trabalha apenas com o que decidir escrever ou enviar.</p>
+            <div className="start-actions">
+              <Button className="new-book-cta" onClick={createNewBook}><Plus size={18} /> Novo livro</Button>
+              <Button variant="outline" className="upload-book-cta" disabled={loadingImport} onClick={() => zipInputRef.current?.click()}><FileArchive size={17} /> Subir arquivo .zip</Button>
+            </div>
+            <button className="folder-text-action" disabled={loadingImport} onClick={() => folderInputRef.current?.click()}><FolderOpen size={15} /> ou selecionar uma pasta</button>
+          </section>
+          <section
+            className={`start-dropzone ${isDropTarget ? "is-drop-target" : ""}`}
+            onDrop={handleDrop}
+            onDragOver={(event) => { event.preventDefault(); setIsDropTarget(true); }}
+            onDragLeave={() => setIsDropTarget(false)}
+          >
+            <div className="drop-folio">01</div>
+            <div className="start-drop-icon">{loadingImport ? <LoaderCircle className="spin" size={24} /> : <Upload size={24} />}</div>
+            <strong>{loadingImport ? "Lendo o projeto..." : "Suba um livro para organizar"}</strong>
+            <p>Arraste um ZIP com arquivos <code>.md</code>, <code>index.json</code> opcional e a pasta <code>assets/</code>.</p>
+            <div className="drop-rule" />
+            <small>Os arquivos permanecem nesta sessão do navegador.</small>
+          </section>
+          <input ref={zipInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={handleZipInput} />
+          <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderInput} />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -528,6 +585,7 @@ export default function Home() {
         "--book-indent": `${settings.paragraphIndent}mm`,
       } as React.CSSProperties}
     >
+      <style media="print">{`@page { size: ${dimensions.width}mm ${dimensions.height}mm; margin: 0; }`}</style>
       <aside className="book-spine no-print">
         <div className="brand-lockup">
           <img src={BRAND_LOGO} alt="Símbolo Caderno" className="brand-symbol" />
@@ -766,7 +824,6 @@ export default function Home() {
           <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderInput} />
         </section>
 
-        <button className="sample-book" onClick={createSampleBook}><Sparkles size={16} /><span><strong>Abrir livro-exemplo</strong><small>Explore todos os recursos</small></span><ChevronRight size={16} /></button>
         <section className="project-stats"><div className="inventory-label"><span>INVENTÁRIO DA OFICINA</span><i>✣</i></div>
           <div><FileText size={16} /><span><strong>{chapters.length}</strong> arquivos Markdown</span></div>
           <div><ImageIcon size={16} /><span><strong>{Object.keys(assetUrls).length}</strong> imagens locais</span></div>
