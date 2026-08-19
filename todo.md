@@ -4,5 +4,5 @@
 - [x] Criar o fluxo de publicação que compila o aplicativo e entrega os arquivos estáticos ao GitHub Pages.
 - [x] Atualizar o README com o endereço de teste, o roteiro de validação e limitações conhecidas.
 - [x] Executar a compilação de produção e conferir os caminhos de recursos no resultado.
-- [ ] Enviar a configuração e a documentação ao repositório `harrisalexandre/editor-markdown`.
-- [ ] Confirmar a ativação do GitHub Pages e o endereço de teste público.
+- [ ] Enviar a correção de rota do GitHub Pages ao repositório `harrisalexandre/editor-markdown`.
+- [ ] Confirmar que a página de teste abre diretamente em `https://harrisalexandre.github.io/editor-markdown/`.
