@@ -1,5 +1,6 @@
 # Publicação para teste — Caderno
 
+- [x] Revisar e corrigir as regras de impressão para que capítulos longos fluam entre páginas sem corte de texto.
 - [x] Implementar salvamento automático e restauração local de manuscrito, metadados e configurações sem persistir arquivos binários.
 - [x] Entregar auditoria de recursos profissionais e uma priorização por impacto e esforço, sem implementar os itens da auditoria nesta etapa.
 - [x] Remover qualquer duplicação de títulos entre Markdown, pré-visualização, montagem, impressão e ePub.

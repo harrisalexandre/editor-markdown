@@ -199,15 +199,15 @@
   .print-root { display:block; }
   .print-book-pages { display:block; }
   .book-pages { display:block; }
-  .book-page { box-shadow:none; width:var(--page-width); min-height:var(--page-height); height:var(--page-height); margin:0; break-after:page; page-break-after:always; overflow:hidden; }
-  .book-section { display:block; }
-  .book-page-content { padding:calc(var(--print-top) + 7mm) var(--print-side) calc(var(--print-bottom) + 4mm); }
-  .book-markdown { font-size:var(--book-font-size); line-height:var(--book-line-height); orphans:3; widows:3; }
-  .book-markdown p,.book-markdown h1,.book-markdown h2,.book-markdown h3,.book-markdown blockquote,.book-markdown img { break-inside:avoid; page-break-inside:avoid; }
-  .book-page:last-child { break-after:auto; page-break-after:auto; }
-}
-
-@media print {
-  .book-page { height:auto; overflow:visible; break-inside:auto; page-break-inside:auto; }
+  .book-page { box-shadow:none; width:var(--page-width); min-height:var(--page-height); height:auto; margin:0; overflow:visible; break-inside:auto; page-break-inside:auto; }
+  .cover-page,.toc-page,.act-opening { height:var(--page-height); overflow:hidden; break-after:page; page-break-after:always; }
+  .book-section { display:block; break-after:page; page-break-after:always; }
+  .book-section:last-of-type { break-after:auto; page-break-after:auto; }
+  .chapter-page { break-after:auto; page-break-after:auto; }
+  .book-page-content { min-height:calc(var(--page-height) - var(--print-top) - var(--print-bottom) - 11mm); padding:calc(var(--print-top) + 7mm) var(--print-side) calc(var(--print-bottom) + 4mm); }
+  .book-markdown { font-size:var(--book-font-size); line-height:var(--book-line-height); orphans:3; widows:3; overflow-wrap:break-word; }
   .book-markdown p { break-inside:auto; page-break-inside:auto; }
+  .book-markdown h1,.book-markdown h2,.book-markdown h3,.book-markdown blockquote,.book-markdown figure,.book-markdown img { break-inside:avoid; page-break-inside:avoid; }
+  .chapter-page + .chapter-page { break-before:page; page-break-before:always; }
+  .book-page:last-child { break-after:auto; page-break-after:auto; }
 }
