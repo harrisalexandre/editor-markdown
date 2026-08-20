@@ -914,6 +914,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
         "--book-color": settings.bodyColor,
         "--book-paper": settings.paperColor,
         "--book-accent": settings.accentColor,
+        "--book-image-max-height": `${Math.max(42, Math.floor((dimensions.height - settings.marginTop - settings.marginBottom - 34) * 0.76))}mm`,
         "--drop-cap-font": settings.dropCapFont,
         "--drop-cap-color": settings.dropCapColor,
         "--drop-cap-lines": settings.dropCapLines,
@@ -1225,7 +1226,12 @@ function PaginatedChapterPreview({ metadata, group, chapter, settings, assetUrls
     const linesPerPage = Math.max(12, Math.floor(innerHeight / Math.max(fontMillimeters * settings.lineHeight, 1)));
     const pageCapacity = Math.max(260, Math.floor(charactersPerLine * linesPerPage * 0.72));
     const document = new DOMParser().parseFromString(chapterHtml, "text/html");
-    const blocks = Array.from(document.body.children).map((node) => node.outerHTML);
+    const blocks = Array.from(document.body.children).map((node) => {
+      const hasImage = Boolean(node.querySelector("img"));
+      if (hasImage) node.classList.add("book-image-block");
+      const textWeight = Math.max(35, node.textContent?.trim().length ?? 0);
+      return { html: node.outerHTML, weight: hasImage ? Math.max(textWeight, Math.floor(pageCapacity * 0.7)) : textWeight };
+    });
     const bodyClass = `book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`;
     const firstPagePrefix = `<span class="book-label">${group}</span><h2>${chapter.title}</h2><div class="chapter-mark"></div>`;
     const composed: string[] = [];
@@ -1238,10 +1244,9 @@ function PaginatedChapterPreview({ metadata, group, chapter, settings, assetUrls
       pageWeight = 0;
     };
 
-    blocks.forEach((block) => {
-      const weight = Math.max(35, new DOMParser().parseFromString(block, "text/html").body.textContent?.trim().length ?? 0);
+    blocks.forEach(({ html, weight }) => {
       if (pageBlocks.length && pageWeight + weight > pageCapacity) closePage(composed.length === 0);
-      pageBlocks.push(block);
+      pageBlocks.push(html);
       pageWeight += weight;
     });
     if (pageBlocks.length || !composed.length) closePage(composed.length === 0);
