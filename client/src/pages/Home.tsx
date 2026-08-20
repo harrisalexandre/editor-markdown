@@ -524,7 +524,7 @@ export default function Home() {
     setActiveId(orderedChapters[0].id);
     setOpenActs(Object.fromEntries(groupChapters(orderedChapters).map((group) => [group.act, true])));
     setHasProject(true);
-    setTab("editar");
+    setTab("configurar");
     toast.success(`${orderedChapters.length} arquivos de texto foram organizados no manuscrito.`);
   };
 
@@ -596,7 +596,7 @@ export default function Home() {
     setActiveId(firstChapter.id);
     setOpenActs({ Manuscrito: true });
     setHasProject(true);
-    setTab("editar");
+    setTab("configurar");
     toast.success("Livro vazio criado. Dê um título e comece a escrever.");
   };
 
@@ -988,10 +988,10 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
             <img src={BRAND_LOGO} alt="" />
             <span>OFICINA<br /><b>01</b></span>
           </div>
-          <div className="view-tabs" role="tablist" aria-label="Áreas de trabalho">
-            <button className={tab === "editar" ? "selected" : ""} onClick={() => setTab("editar")}><PenLine size={16} /> Editar</button>
-            <button className={tab === "montar" ? "selected" : ""} onClick={() => setTab("montar")}><LayoutTemplate size={16} /> Montagem</button>
-            <button className={tab === "configurar" ? "selected" : ""} onClick={() => setTab("configurar")}><Settings2 size={16} /> Impressão</button>
+          <div className="view-tabs" role="tablist" aria-label="Etapas de preparação do livro">
+            <button className={tab === "configurar" ? "selected" : ""} onClick={() => setTab("configurar")}><Settings2 size={16} /> 1. Página</button>
+            <button className={tab === "editar" ? "selected" : ""} onClick={() => setTab("editar")}><PenLine size={16} /> 2. Conteúdo</button>
+            <button className={tab === "montar" ? "selected" : ""} onClick={() => setTab("montar")}><LayoutTemplate size={16} /> 3. Preparar impressão</button>
           </div>
           <div className="topbar-actions">
             <Tooltip>
@@ -1061,7 +1061,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
               <div>
                 <span className="eyebrow">PROVA DE COMPOSIÇÃO</span>
                 <h1>O livro em sequência</h1>
-                <p>{chaptersForOutput.length} capítulos incluídos · {dimensions.label} · {settings.bodyFont}</p>
+                <p>Folhas em escala do trim · {dimensions.label} · {settings.bodyFont}</p>
               </div>
               <div className="assembly-summary"><ListTree size={18} /><strong>{outputGroups.length}</strong><span>seções</span></div>
             </div>
@@ -1071,7 +1071,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
               settings={settings}
               assetUrls={assetUrls}
               coverUrl={coverUrl}
-              className="screen-book-pages"
+              className="screen-book-pages paged-book-preview"
             />
           </section>
         )}
@@ -1080,8 +1080,8 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
           <section className="settings-area">
             <div className="settings-intro">
               <span className="eyebrow">CONFIGURAÇÃO DE SAÍDA</span>
-              <h1>Prepare a página para a imprensa.</h1>
-              <p>Essas definições controlam o preview e a janela de impressão do navegador. O texto permanece selecionável ao salvar como PDF.</p>
+              <h1>1. Defina a página.</h1>
+              <p>Escolha trim, margens, gutter e ritmo tipográfico antes de editar o conteúdo. Essas definições controlam a prévia de folhas e a janela de impressão.</p>
             </div>
             <div className="settings-grid">
               <section className="settings-card">
@@ -1122,7 +1122,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
                   <SwitchField label="Cabeçalho corrido" description="Título do livro no alto das páginas" checked={settings.includeHeader} onCheckedChange={(includeHeader) => setSettings((current) => ({ ...current, includeHeader }))} />
                 </div>
                 <div className="drop-cap-controls"><SwitchField label="Capitular" description="Aplica uma letra inicial decorativa ao primeiro parágrafo do capítulo" checked={settings.dropCapEnabled} onCheckedChange={(dropCapEnabled) => setSettings((current) => ({ ...current, dropCapEnabled }))} />{settings.dropCapEnabled && <div className="field-grid three-col"><Field label="Fonte da capitular"><Select value={settings.dropCapFont} onValueChange={(value: PrintSettings["dropCapFont"]) => setSettings((current) => ({ ...current, dropCapFont: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Playfair Display">Playfair Display</SelectItem><SelectItem value="Cormorant Garamond">Cormorant Garamond</SelectItem><SelectItem value="Georgia">Georgia</SelectItem></SelectContent></Select></Field><ColorField label="Cor da capitular" value={settings.dropCapColor} onChange={(dropCapColor) => setSettings((current) => ({ ...current, dropCapColor }))} /><RangeField label="Altura" value={settings.dropCapLines} min={2} max={5} step={1} suffix=" linhas" onChange={(dropCapLines) => setSettings((current) => ({ ...current, dropCapLines }))} /></div>}</div>
-                <div className="settings-cta"><div><strong>Saída do livro.</strong><span>Gere uma prova PDF ou um ePub refluível para leitores digitais.</span></div><div className="settings-cta-actions"><Button variant="outline" onClick={downloadEpub} disabled={exportingEpub}><BookOpen size={16} /> {exportingEpub ? "Gerando ePub..." : "Exportar ePub"}</Button><Button onClick={printBook}><Printer size={16} /> Gerar prova em PDF</Button></div></div>
+                <div className="settings-cta"><div><strong>Próxima etapa: conteúdo.</strong><span>Com a página definida, escreva, revise e então prepare a prova final.</span></div><div className="settings-cta-actions"><Button variant="outline" onClick={() => setTab("editar")}><PenLine size={16} /> Ir para conteúdo</Button><Button onClick={() => setTab("montar")}><LayoutTemplate size={16} /> Ver preparação</Button></div></div>
               </section>
             </div>
           </section>

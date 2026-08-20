@@ -1,5 +1,6 @@
 # Publicação para teste — Caderno
 
+- [x] Substituir a montagem contínua por uma prévia visual em folhas A5 e reorganizar a navegação para Página, Conteúdo e Preparar impressão.
 - [x] Garantir e validar que a supressão do primeiro título Markdown seja idêntica na prévia, montagem e prova PDF.
 - [x] Normalizar o primeiro heading Markdown para evitar duplicação com o título editorial do capítulo e publicar a correção.
 - [x] Diagnosticar a divergência entre prévia e PDF, incluindo trim, fonte, margens, paginação e propagação de configurações, sem implementar correções.
