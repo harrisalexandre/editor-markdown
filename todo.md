@@ -1,5 +1,8 @@
 # Publicação para teste — Caderno
 
+- [x] Substituir a rolagem interna da montagem por conteúdo repartido automaticamente entre folhas sequenciais reais.
+- [ ] Permitir declarar que a capa enviada já contém título e autor, evitando sobreposições editoriais.
+- [ ] Fazer trim, margens, gutter, fonte e ritmo configurados aparecerem de modo inequívoco na prévia e na prova PDF.
 - [x] Substituir a montagem contínua por uma prévia visual em folhas A5 e reorganizar a navegação para Página, Conteúdo e Preparar impressão.
 - [x] Garantir e validar que a supressão do primeiro título Markdown seja idêntica na prévia, montagem e prova PDF.
 - [x] Normalizar o primeiro heading Markdown para evitar duplicação com o título editorial do capítulo e publicar a correção.

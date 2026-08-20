@@ -100,6 +100,7 @@ type PrintSettings = {
   lineHeight: number;
   paragraphIndent: number;
   includeCover: boolean;
+  coverIsComplete: boolean;
   includeToc: boolean;
   includeActs: boolean;
   includeNumbers: boolean;
@@ -166,6 +167,7 @@ const defaultPrintSettings: PrintSettings = {
   lineHeight: 1.62,
   paragraphIndent: 6,
   includeCover: true,
+  coverIsComplete: false,
   includeToc: true,
   includeActs: true,
   includeNumbers: true,
@@ -401,6 +403,7 @@ export default function Home() {
   const activeChapter = chapters.find((chapter) => chapter.id === activeId) ?? chapters[0];
   const groups = useMemo(() => groupChapters(chapters), [chapters]);
   const dimensions = pageDimensions(settings);
+  const previewScale = 2.15;
   const coverUrl = useMemo(() => {
     const cover = Object.entries(assetUrls).find(([path]) => /(^|\/)(capa|cover)(\.|[-_])/i.test(path));
     return cover?.[1] ?? DEFAULT_COVER;
@@ -893,9 +896,16 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
         "--paper-texture": `url(${PAPER_TEXTURE})`,
         "--page-width": `${dimensions.width}mm`,
         "--page-height": `${dimensions.height}mm`,
+        "--page-preview-width": `${dimensions.width * previewScale}px`,
+        "--page-preview-height": `${dimensions.height * previewScale}px`,
         "--print-top": `${settings.marginTop}mm`,
         "--print-bottom": `${settings.marginBottom}mm`,
         "--print-side": `${settings.marginSide}mm`,
+        "--book-gutter": `${settings.mirroredMargins ? settings.gutterMargin : 0}mm`,
+        "--proof-top": `${settings.marginTop * previewScale}px`,
+        "--proof-bottom": `${settings.marginBottom * previewScale}px`,
+        "--proof-outer-side": `${settings.marginSide * previewScale}px`,
+        "--proof-inner-side": `${(settings.marginSide + (settings.mirroredMargins ? settings.gutterMargin : 0)) * previewScale}px`,
         "--book-font": settings.bodyFont,
         "--display-font": settings.titleFont,
         "--book-font-size": `${settings.fontSize}pt`,
@@ -1044,7 +1054,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
               </section>
               <section className="live-preview-pane">
                 <div className="pane-heading"><span><EyeIcon /> PRÉ-VISUALIZAÇÃO</span><span>renderização ao vivo</span></div>
-                <article className="chapter-proof">
+                <article className={`chapter-proof ${settings.mirroredMargins ? "proof-mirrored" : ""}`}>
                   <div className="proof-running-head"><span>{metadata.title}</span><span>prova de leitura</span></div>
                   <h1>{activeChapter?.title || "Capítulo sem título"}</h1>
                   <div className="proof-rule" />
@@ -1138,6 +1148,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
           <label>Autor<Input value={metadata.author} onChange={(event) => setMetadata((current) => ({ ...current, author: event.target.value }))} /></label>
           <label>Sinopse<Textarea value={metadata.description} onChange={(event) => setMetadata((current) => ({ ...current, description: event.target.value }))} /></label>
           <div className="cover-upload"><div><span>Capa do livro</span><small>{assets.some((asset) => isCoverPath(asset.path)) ? "imagem definida" : "nenhuma capa enviada"}</small></div><Button type="button" variant="outline" size="sm" onClick={() => coverInputRef.current?.click()}><ImageIcon size={14} /> {assets.some((asset) => isCoverPath(asset.path)) ? "Trocar capa" : "Enviar capa"}</Button></div>
+          <SwitchField label="A capa já possui título e autor" description="Usa a arte integral, sem faixa escura, título, autoria ou colofão sobrepostos." checked={settings.coverIsComplete} onCheckedChange={(coverIsComplete) => setSettings((current) => ({ ...current, coverIsComplete }))} />
         </section>
 
         <section
@@ -1203,11 +1214,64 @@ function PaginationLedger({ entries }: { entries: PaginationPreviewEntry[] }) {
   </aside>;
 }
 
+function PaginatedChapterPreview({ metadata, group, chapter, settings, assetUrls, initialSide, initialFolio }: { metadata: BookMeta; group: string; chapter: Chapter; settings: PrintSettings; assetUrls: Record<string, string>; initialSide: "folio-recto" | "folio-verso"; initialFolio: React.ReactNode }) {
+  const chapterHtml = useMemo(() => renderedChapterBody(chapter, assetUrls), [chapter, assetUrls]);
+  const pages = useMemo(() => {
+    const dimensions = pageDimensions(settings);
+    const innerWidth = dimensions.width - (settings.marginSide * 2) - (settings.mirroredMargins ? settings.gutterMargin : 0);
+    const innerHeight = dimensions.height - settings.marginTop - settings.marginBottom - 14;
+    const fontMillimeters = settings.fontSize * 0.3528;
+    const charactersPerLine = Math.max(24, Math.floor(innerWidth / Math.max(fontMillimeters * 0.78, 1)));
+    const linesPerPage = Math.max(12, Math.floor(innerHeight / Math.max(fontMillimeters * settings.lineHeight, 1)));
+    const pageCapacity = Math.max(260, Math.floor(charactersPerLine * linesPerPage * 0.72));
+    const document = new DOMParser().parseFromString(chapterHtml, "text/html");
+    const blocks = Array.from(document.body.children).map((node) => node.outerHTML);
+    const bodyClass = `book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`;
+    const firstPagePrefix = `<span class="book-label">${group}</span><h2>${chapter.title}</h2><div class="chapter-mark"></div>`;
+    const composed: string[] = [];
+    let pageBlocks: string[] = [];
+    let pageWeight = Math.ceil((group.length + chapter.title.length) * 1.8) + 150;
+    const closePage = (withPrefix: boolean) => {
+      const prefix = withPrefix ? firstPagePrefix : "";
+      composed.push(`${prefix}<div class="${bodyClass}">${pageBlocks.join("")}</div>`);
+      pageBlocks = [];
+      pageWeight = 0;
+    };
+
+    blocks.forEach((block) => {
+      const weight = Math.max(35, new DOMParser().parseFromString(block, "text/html").body.textContent?.trim().length ?? 0);
+      if (pageBlocks.length && pageWeight + weight > pageCapacity) closePage(composed.length === 0);
+      pageBlocks.push(block);
+      pageWeight += weight;
+    });
+    if (pageBlocks.length || !composed.length) closePage(composed.length === 0);
+    return composed;
+  }, [chapterHtml, chapter.title, group, settings]);
+
+  const sideForPage = (index: number) => initialSide === "folio-recto"
+    ? index % 2 === 0 ? "folio-recto" : "folio-verso"
+    : index % 2 === 0 ? "folio-verso" : "folio-recto";
+
+  return (
+    <>
+      {pages.map((pageHtml, index) => (
+        <article className={`book-page chapter-page ${sideForPage(index)}`} key={`${chapter.id}-page-${index}`}>
+          {settings.includeHeader && <div className="print-running-head"><span>{metadata.title}</span><span>{index === 0 ? group : `${group} · continuação`}</span></div>}
+          <div className="book-page-content" dangerouslySetInnerHTML={{ __html: pageHtml }} />
+          {index === 0 ? initialFolio : <div className={`page-number ${settings.pageNumberPosition} ${sideForPage(index)} folio-continuation`}>{index + 1}</div>}
+        </article>
+      ))}
+    </>
+  );
+}
+
 function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className }: { metadata: BookMeta; groups: { act: string; chapters: Chapter[] }[]; settings: PrintSettings; assetUrls: Record<string, string>; coverUrl: string; className: string }) {
   const chapters = groups.flatMap((group) => group.chapters);
+  const isScreenPreview = className.includes("paged-book-preview");
   let physicalPageIndex = settings.includeCover ? 2 : 1;
   let romanPageIndex = 1;
   let arabicPageIndex = 1;
+  const pageSide = () => physicalPageIndex % 2 === 0 ? "folio-verso" : "folio-recto";
   const renderFolio = (series: "roman" | "arabic", hidden = false) => {
     if (!settings.includeNumbers) return null;
     const parity = settings.parityFolios ? (physicalPageIndex % 2 === 0 ? "folio-verso" : "folio-recto") : "";
@@ -1219,13 +1283,13 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
   return (
     <div className={`book-pages ${className}`}>
       {settings.includeCover && (
-        <article className="book-page cover-page">
-          <div className="cover-art" style={{ backgroundImage: `linear-gradient(180deg, rgba(22,22,20,.08), rgba(22,22,20,.45)), url(${coverUrl})` }} />
-          <div className="cover-content"><div className="cover-kicker">EDIÇÃO DE TRABALHO</div><h1>{metadata.title}</h1><p>{metadata.author}</p><div className="cover-colophon"><img src={BRAND_LOGO} alt="" /> CADERNO</div></div>
+        <article className={`book-page cover-page folio-recto ${settings.coverIsComplete ? "cover-is-complete" : ""}`}>
+          <div className="cover-art" style={{ backgroundImage: settings.coverIsComplete ? `url(${coverUrl})` : `linear-gradient(180deg, rgba(22,22,20,.08), rgba(22,22,20,.45)), url(${coverUrl})` }} />
+          {!settings.coverIsComplete && <div className="cover-content"><div className="cover-kicker">EDIÇÃO DE TRABALHO</div><h1>{metadata.title}</h1><p>{metadata.author}</p><div className="cover-colophon"><img src={BRAND_LOGO} alt="" /> CADERNO</div></div>}
         </article>
       )}
       {settings.includeToc && (
-        <article className="book-page toc-page">
+        <article className={`book-page toc-page ${pageSide()}`}>
           <div className="print-running-head"><span>{metadata.title}</span><span>sumário</span></div>
           <div className="book-page-content"><span className="book-label">SUMÁRIO</span><h2>Mapa do livro</h2><div className="toc-list">{groups.map((group) => <div key={group.act} className="toc-group"><strong>{group.act}</strong>{group.chapters.map((chapter, index) => <div key={chapter.id}><span>{chapter.title}</span><i /><em>{index + 1}</em></div>)}</div>)}</div></div>
           {renderFolio(settings.romanFrontMatter ? "roman" : "arabic")}
@@ -1235,18 +1299,21 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
         const groupIsPreTextual = settings.romanFrontMatter && isPreTextual(group.act);
         return <div className="book-section" key={group.act}>
           {settings.includeActs && group.act !== "Sem seção" && (
-            <article className="book-page act-opening">
+            <article className={`book-page act-opening ${pageSide()}`}>
               <div className="act-opening-content"><span className="book-label">NOVA SEÇÃO</span><div className="act-marker">{String(groups.indexOf(group) + 1).padStart(2, "0")}</div><h2>{group.act}</h2></div>
               {renderFolio(groupIsPreTextual ? "roman" : "arabic", settings.hideSectionInitialFolios)}
             </article>
           )}
-          {group.chapters.map((chapter) => (
-            <article className="book-page chapter-page" key={chapter.id}>
+          {group.chapters.map((chapter) => {
+            const chapterSide = pageSide();
+            const chapterFolio = renderFolio(settings.romanFrontMatter && (groupIsPreTextual || isPreTextual(group.act, chapter.title)) ? "roman" : "arabic", settings.hideChapterInitialFolios);
+            if (isScreenPreview) return <PaginatedChapterPreview key={chapter.id} metadata={metadata} group={group.act} chapter={chapter} settings={settings} assetUrls={assetUrls} initialSide={chapterSide} initialFolio={chapterFolio} />;
+            return <article className={`book-page chapter-page ${chapterSide}`} key={chapter.id}>
               {settings.includeHeader && <div className="print-running-head"><span>{metadata.title}</span><span>{group.act}</span></div>}
               <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className={`book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedChapterBody(chapter, assetUrls) }} /></div>
-              {renderFolio(settings.romanFrontMatter && (groupIsPreTextual || isPreTextual(group.act, chapter.title)) ? "roman" : "arabic", settings.hideChapterInitialFolios)}
-            </article>
-          ))}
+              {chapterFolio}
+            </article>;
+          })}
         </div>;
       })}
       {!chapters.length && <div className="empty-book"><BookOpen size={26} /><strong>Nenhum texto selecionado</strong><span>Marque ao menos um capítulo na espinha do livro para visualizar a montagem.</span></div>}
