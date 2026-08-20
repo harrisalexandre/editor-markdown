@@ -89,6 +89,7 @@ type PrintSettings = {
   gutterMargin: number;
   startChaptersOnRecto: boolean;
   parityFolios: boolean;
+  romanFrontMatter: boolean;
   bodyFont: "Source Serif 4" | "Georgia" | "Merriweather";
   titleFont: "Playfair Display" | "Cormorant Garamond" | "Georgia";
   fontSize: number;
@@ -142,6 +143,7 @@ const defaultPrintSettings: PrintSettings = {
   gutterMargin: 5,
   startChaptersOnRecto: true,
   parityFolios: true,
+  romanFrontMatter: true,
   bodyFont: "Source Serif 4",
   titleFont: "Playfair Display",
   fontSize: 11.5,
@@ -301,6 +303,18 @@ function groupChapters(chapters: Chapter[]) {
   });
   return groups;
 }
+
+const toRoman = (value: number) => {
+  const units: [number, string][] = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let remaining = Math.max(1, value);
+  return units.map(([amount, symbol]) => {
+    const count = Math.floor(remaining / amount);
+    remaining %= amount;
+    return symbol.repeat(count);
+  }).join("").toLowerCase();
+};
+
+const isPreTextual = (act: string, title = "") => /introdu[cç][aã]o|pref[aá]cio|apresenta[cç][aã]o|dedicat[oó]ria|agradecimento|nota do autor/i.test(`${act} ${title}`);
 
 export default function Home() {
   const zipInputRef = useRef<HTMLInputElement>(null);
@@ -1124,11 +1138,15 @@ function SwitchField({ label, description, checked, onCheckedChange }: { label: 
 
 function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className }: { metadata: BookMeta; groups: { act: string; chapters: Chapter[] }[]; settings: PrintSettings; assetUrls: Record<string, string>; coverUrl: string; className: string }) {
   const chapters = groups.flatMap((group) => group.chapters);
-  let pageIndex = settings.includeCover ? 2 : 1;
-  const renderFolio = () => {
+  let physicalPageIndex = settings.includeCover ? 2 : 1;
+  let romanPageIndex = 1;
+  let arabicPageIndex = 1;
+  const renderFolio = (series: "roman" | "arabic") => {
     if (!settings.includeNumbers) return null;
-    const parity = settings.parityFolios ? (pageIndex % 2 === 0 ? "folio-verso" : "folio-recto") : "";
-    return <div className={`page-number ${settings.pageNumberPosition} ${parity}`}>{pageIndex++}</div>;
+    const parity = settings.parityFolios ? (physicalPageIndex % 2 === 0 ? "folio-verso" : "folio-recto") : "";
+    const value = series === "roman" ? toRoman(romanPageIndex++) : arabicPageIndex++;
+    physicalPageIndex += 1;
+    return <div className={`page-number ${settings.pageNumberPosition} ${parity} folio-${series}`}>{value}</div>;
   };
   return (
     <div className={`book-pages ${className}`}>
@@ -1142,26 +1160,27 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
         <article className="book-page toc-page">
           <div className="print-running-head"><span>{metadata.title}</span><span>sumário</span></div>
           <div className="book-page-content"><span className="book-label">SUMÁRIO</span><h2>Mapa do livro</h2><div className="toc-list">{groups.map((group) => <div key={group.act} className="toc-group"><strong>{group.act}</strong>{group.chapters.map((chapter, index) => <div key={chapter.id}><span>{chapter.title}</span><i /><em>{index + 1}</em></div>)}</div>)}</div></div>
-          {renderFolio()}
+          {renderFolio(settings.romanFrontMatter ? "roman" : "arabic")}
         </article>
       )}
-      {groups.map((group) => (
-        <div className="book-section" key={group.act}>
+      {groups.map((group) => {
+        const groupIsPreTextual = settings.romanFrontMatter && isPreTextual(group.act);
+        return <div className="book-section" key={group.act}>
           {settings.includeActs && group.act !== "Sem seção" && (
             <article className="book-page act-opening">
               <div className="act-opening-content"><span className="book-label">NOVA SEÇÃO</span><div className="act-marker">{String(groups.indexOf(group) + 1).padStart(2, "0")}</div><h2>{group.act}</h2></div>
-              {renderFolio()}
+              {renderFolio(groupIsPreTextual ? "roman" : "arabic")}
             </article>
           )}
           {group.chapters.map((chapter) => (
             <article className="book-page chapter-page" key={chapter.id}>
               {settings.includeHeader && <div className="print-running-head"><span>{metadata.title}</span><span>{group.act}</span></div>}
               <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className={`book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedMarkdown(chapter.content, assetUrls, chapter.title, true) }} /></div>
-              {renderFolio()}
+              {renderFolio(settings.romanFrontMatter && (groupIsPreTextual || isPreTextual(group.act, chapter.title)) ? "roman" : "arabic")}
             </article>
           ))}
-        </div>
-      ))}
+        </div>;
+      })}
       {!chapters.length && <div className="empty-book"><BookOpen size={26} /><strong>Nenhum texto selecionado</strong><span>Marque ao menos um capítulo na espinha do livro para visualizar a montagem.</span></div>}
     </div>
   );
