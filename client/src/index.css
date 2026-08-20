@@ -183,6 +183,7 @@
 .cover-upload { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:14px; padding:11px 0 0; border-top:1px solid #e2dacf; }.cover-upload span,.cover-upload small { display:block; }.cover-upload span { color:#554f47; font-size:10px; font-weight:700; }.cover-upload small { margin-top:2px; color:#978f82; font-size:9px; }.cover-upload button { flex:0 0 auto; height:28px; border-radius:2px; font-size:9px; }
 .book-page { overflow:visible; background:var(--book-paper, var(--paper)); }.book-page h2,.book-markdown { color:var(--book-color, #38352f); }.book-label,.toc-group > strong,.act-marker { color:var(--book-accent, var(--carmine)); }.chapter-mark { background:var(--book-accent, var(--carmine)); }.page-number.footer-left { left:var(--print-side); right:auto; text-align:left; }.page-number.footer-right { left:auto; right:var(--print-side); text-align:right; }.page-number.header-left,.page-number.header-center,.page-number.header-right { bottom:auto; top:7mm; z-index:2; }.page-number.header-left { left:var(--print-side); right:auto; text-align:left; }.page-number.header-center { left:0; right:0; text-align:center; }.page-number.header-right { left:auto; right:var(--print-side); text-align:right; }
 .three-col { grid-template-columns:1.2fr .8fr 1fr; align-items:end; margin-top:10px; }.color-fields { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:19px; }.color-field { display:grid; gap:6px; color:#847d72; font-size:9px; font-weight:700; letter-spacing:.06em; }.color-field > div { height:34px; display:flex; align-items:center; gap:7px; padding:3px 6px; background:#fffdf8; border:1px solid #ddd4c7; border-radius:3px; }.color-field input { width:22px; height:22px; padding:0; border:0; background:transparent; }.color-field code { color:#5b554d; font:9px ui-monospace,monospace; letter-spacing:0; }.drop-cap-controls { margin-top:8px; border-top:1px solid #e5ddd1; }.settings-cta-actions { display:flex; gap:7px; }.settings-cta .settings-cta-actions button:first-child { color:#514b43; background:#fffdf8; border-color:#c9beb0; }.settings-cta .settings-cta-actions button:first-child:hover { color:var(--carmine); border-color:var(--carmine); }
+.print-parity-controls { margin-top:14px; border-top:1px solid #e5ddd1; }.print-parity-controls .range-field { padding:0 0 12px; margin-top:10px; border-bottom:1px solid #ece5db; }
 
 @keyframes spin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion:no-preference) { .book-spine,.workspace,.import-rail { animation: rise .34s var(--ease-out) both; }.workspace { animation-delay:.04s; }.import-rail { animation-delay:.08s; } @keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } } }
@@ -210,4 +211,9 @@
   .book-markdown h1,.book-markdown h2,.book-markdown h3,.book-markdown blockquote,.book-markdown figure,.book-markdown img { break-inside:avoid; page-break-inside:avoid; }
   .chapter-page + .chapter-page { break-before:page; page-break-before:always; }
   .book-page:last-child { break-after:auto; page-break-after:auto; }
+  .app-shell.print-parity-enabled .chapter-page { break-before:right; page-break-before:right; }
+  .app-shell.print-mirrored .book-page-content { padding-left:0; padding-right:0; }
+  .app-shell.print-parity-enabled .page-number { position:static; margin-top:5mm; }
+  .app-shell.print-parity-enabled .page-number.folio-recto { text-align:right; }
+  .app-shell.print-parity-enabled .page-number.folio-verso { text-align:left; }
 }

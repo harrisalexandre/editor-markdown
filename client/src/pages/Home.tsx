@@ -85,6 +85,10 @@ type PrintSettings = {
   marginTop: number;
   marginBottom: number;
   marginSide: number;
+  mirroredMargins: boolean;
+  gutterMargin: number;
+  startChaptersOnRecto: boolean;
+  parityFolios: boolean;
   bodyFont: "Source Serif 4" | "Georgia" | "Merriweather";
   titleFont: "Playfair Display" | "Cormorant Garamond" | "Georgia";
   fontSize: number;
@@ -134,6 +138,10 @@ const defaultPrintSettings: PrintSettings = {
   marginTop: 20,
   marginBottom: 22,
   marginSide: 18,
+  mirroredMargins: true,
+  gutterMargin: 5,
+  startChaptersOnRecto: true,
+  parityFolios: true,
   bodyFont: "Source Serif 4",
   titleFont: "Playfair Display",
   fontSize: 11.5,
@@ -807,7 +815,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
 
   return (
     <div
-      className="app-shell"
+      className={`app-shell ${settings.mirroredMargins ? "print-mirrored" : ""} ${(settings.startChaptersOnRecto || settings.parityFolios) ? "print-parity-enabled" : ""}`}
       style={{
         "--paper-texture": `url(${PAPER_TEXTURE})`,
         "--page-width": `${dimensions.width}mm`,
@@ -828,7 +836,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
         "--drop-cap-lines": settings.dropCapLines,
       } as React.CSSProperties}
     >
-      <style media="print">{`@page { size: ${dimensions.width}mm ${dimensions.height}mm; margin: 0; }`}</style>
+      <style media="print">{`@page { size: ${dimensions.width}mm ${dimensions.height}mm; margin: 0; }${settings.mirroredMargins ? `@page :left { margin: ${settings.marginTop}mm ${settings.marginSide}mm ${settings.marginBottom}mm ${settings.marginSide + settings.gutterMargin}mm; } @page :right { margin: ${settings.marginTop}mm ${settings.marginSide + settings.gutterMargin}mm ${settings.marginBottom}mm ${settings.marginSide}mm; }` : ""}`}</style>
       <aside className="book-spine no-print">
         <div className="brand-lockup">
           <img src={BRAND_LOGO} alt="Símbolo Caderno" className="brand-symbol" />
@@ -1011,11 +1019,12 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
                   <Field label="Posição da numeração"><Select value={settings.pageNumberPosition} onValueChange={(value: PageNumberPosition) => setSettings((current) => ({ ...current, pageNumberPosition: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="footer-center">Rodapé central</SelectItem><SelectItem value="footer-left">Rodapé esquerdo</SelectItem><SelectItem value="footer-right">Rodapé direito</SelectItem><SelectItem value="header-left">Cabeçalho esquerdo</SelectItem><SelectItem value="header-center">Cabeçalho central</SelectItem><SelectItem value="header-right">Cabeçalho direito</SelectItem></SelectContent></Select></Field>
                 </div>
                 {settings.pageFormat === "Custom" && <div className="field-grid two-col"><Field label="Largura (mm)"><Input type="number" value={settings.customWidth} onChange={(event) => setSettings((current) => ({ ...current, customWidth: Number(event.target.value) || 1 }))} /></Field><Field label="Altura (mm)"><Input type="number" value={settings.customHeight} onChange={(event) => setSettings((current) => ({ ...current, customHeight: Number(event.target.value) || 1 }))} /></Field></div>}
-                <div className="margin-grid">
-                  <Field label="Superior (mm)"><Input type="number" value={settings.marginTop} onChange={(event) => setSettings((current) => ({ ...current, marginTop: Number(event.target.value) || 0 }))} /></Field>
-                  <Field label="Inferior (mm)"><Input type="number" value={settings.marginBottom} onChange={(event) => setSettings((current) => ({ ...current, marginBottom: Number(event.target.value) || 0 }))} /></Field>
-                  <Field label="Laterais (mm)"><Input type="number" value={settings.marginSide} onChange={(event) => setSettings((current) => ({ ...current, marginSide: Number(event.target.value) || 0 }))} /></Field>
-                </div>
+              <div className="margin-grid">
+                <Field label="Superior (mm)"><Input type="number" value={settings.marginTop} onChange={(event) => setSettings((current) => ({ ...current, marginTop: Number(event.target.value) || 0 }))} /></Field>
+                <Field label="Inferior (mm)"><Input type="number" value={settings.marginBottom} onChange={(event) => setSettings((current) => ({ ...current, marginBottom: Number(event.target.value) || 0 }))} /></Field>
+                <Field label="Laterais (mm)"><Input type="number" value={settings.marginSide} onChange={(event) => setSettings((current) => ({ ...current, marginSide: Number(event.target.value) || 0 }))} /></Field>
+              </div>
+              <div className="print-parity-controls"><SwitchField label="Margens espelhadas" description="Gutter maior no lado interno de cada página impressa" checked={settings.mirroredMargins} onCheckedChange={(mirroredMargins) => setSettings((current) => ({ ...current, mirroredMargins }))} />{settings.mirroredMargins && <RangeField label="Gutter interno" value={settings.gutterMargin} min={0} max={15} step={1} suffix=" mm" onChange={(gutterMargin) => setSettings((current) => ({ ...current, gutterMargin }))} />}<SwitchField label="Capítulo no recto" description="Força a abertura de cada capítulo em página ímpar" checked={settings.startChaptersOnRecto} onCheckedChange={(startChaptersOnRecto) => setSettings((current) => ({ ...current, startChaptersOnRecto }))} /><SwitchField label="Fólio por paridade" description="Posiciona o número na margem externa de páginas pares e ímpares" checked={settings.parityFolios} onCheckedChange={(parityFolios) => setSettings((current) => ({ ...current, parityFolios }))} /></div>
               </section>
 
               <section className="settings-card">
@@ -1115,7 +1124,12 @@ function SwitchField({ label, description, checked, onCheckedChange }: { label: 
 
 function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className }: { metadata: BookMeta; groups: { act: string; chapters: Chapter[] }[]; settings: PrintSettings; assetUrls: Record<string, string>; coverUrl: string; className: string }) {
   const chapters = groups.flatMap((group) => group.chapters);
-  let pageIndex = 1;
+  let pageIndex = settings.includeCover ? 2 : 1;
+  const renderFolio = () => {
+    if (!settings.includeNumbers) return null;
+    const parity = settings.parityFolios ? (pageIndex % 2 === 0 ? "folio-verso" : "folio-recto") : "";
+    return <div className={`page-number ${settings.pageNumberPosition} ${parity}`}>{pageIndex++}</div>;
+  };
   return (
     <div className={`book-pages ${className}`}>
       {settings.includeCover && (
@@ -1128,7 +1142,7 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
         <article className="book-page toc-page">
           <div className="print-running-head"><span>{metadata.title}</span><span>sumário</span></div>
           <div className="book-page-content"><span className="book-label">SUMÁRIO</span><h2>Mapa do livro</h2><div className="toc-list">{groups.map((group) => <div key={group.act} className="toc-group"><strong>{group.act}</strong>{group.chapters.map((chapter, index) => <div key={chapter.id}><span>{chapter.title}</span><i /><em>{index + 1}</em></div>)}</div>)}</div></div>
-          {settings.includeNumbers && <div className={`page-number ${settings.pageNumberPosition}`}>{pageIndex++}</div>}
+          {renderFolio()}
         </article>
       )}
       {groups.map((group) => (
@@ -1136,14 +1150,14 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
           {settings.includeActs && group.act !== "Sem seção" && (
             <article className="book-page act-opening">
               <div className="act-opening-content"><span className="book-label">NOVA SEÇÃO</span><div className="act-marker">{String(groups.indexOf(group) + 1).padStart(2, "0")}</div><h2>{group.act}</h2></div>
-              {settings.includeNumbers && <div className={`page-number ${settings.pageNumberPosition}`}>{pageIndex++}</div>}
+              {renderFolio()}
             </article>
           )}
           {group.chapters.map((chapter) => (
             <article className="book-page chapter-page" key={chapter.id}>
               {settings.includeHeader && <div className="print-running-head"><span>{metadata.title}</span><span>{group.act}</span></div>}
               <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className={`book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedMarkdown(chapter.content, assetUrls, chapter.title, true) }} /></div>
-              {settings.includeNumbers && <div className={`page-number ${settings.pageNumberPosition}`}>{pageIndex++}</div>}
+              {renderFolio()}
             </article>
           ))}
         </div>
