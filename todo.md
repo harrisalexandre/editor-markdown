@@ -1,5 +1,6 @@
 # Publicação para teste — Caderno
 
+- [x] Separar a ocultação de fólios iniciais em controles independentes para capítulos e seções.
 - [x] Permitir ocultar a numeração na primeira página de cada capítulo ou seção impressa.
 - [x] Permitir escolher algarismos romanos maiúsculos ou minúsculos nos fólios pré-textuais.
 - [x] Exibir fólios romanos no sumário e introdução, com reinício arábico no corpo do livro impresso.

@@ -92,7 +92,8 @@ type PrintSettings = {
   parityFolios: boolean;
   romanFrontMatter: boolean;
   romanNumeralCase: RomanNumeralCase;
-  hideInitialFolios: boolean;
+  hideChapterInitialFolios: boolean;
+  hideSectionInitialFolios: boolean;
   bodyFont: "Source Serif 4" | "Georgia" | "Merriweather";
   titleFont: "Playfair Display" | "Cormorant Garamond" | "Georgia";
   fontSize: number;
@@ -148,7 +149,8 @@ const defaultPrintSettings: PrintSettings = {
   parityFolios: true,
   romanFrontMatter: true,
   romanNumeralCase: "lower",
-  hideInitialFolios: false,
+  hideChapterInitialFolios: false,
+  hideSectionInitialFolios: false,
   bodyFont: "Source Serif 4",
   titleFont: "Playfair Display",
   fontSize: 11.5,
@@ -1044,7 +1046,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
                 <Field label="Inferior (mm)"><Input type="number" value={settings.marginBottom} onChange={(event) => setSettings((current) => ({ ...current, marginBottom: Number(event.target.value) || 0 }))} /></Field>
                 <Field label="Laterais (mm)"><Input type="number" value={settings.marginSide} onChange={(event) => setSettings((current) => ({ ...current, marginSide: Number(event.target.value) || 0 }))} /></Field>
               </div>
-              <div className="print-parity-controls"><SwitchField label="Margens espelhadas" description="Gutter maior no lado interno de cada página impressa" checked={settings.mirroredMargins} onCheckedChange={(mirroredMargins) => setSettings((current) => ({ ...current, mirroredMargins }))} />{settings.mirroredMargins && <RangeField label="Gutter interno" value={settings.gutterMargin} min={0} max={15} step={1} suffix=" mm" onChange={(gutterMargin) => setSettings((current) => ({ ...current, gutterMargin }))} />}<SwitchField label="Capítulo no recto" description="Força a abertura de cada capítulo em página ímpar" checked={settings.startChaptersOnRecto} onCheckedChange={(startChaptersOnRecto) => setSettings((current) => ({ ...current, startChaptersOnRecto }))} /><SwitchField label="Fólio por paridade" description="Posiciona o número na margem externa de páginas pares e ímpares" checked={settings.parityFolios} onCheckedChange={(parityFolios) => setSettings((current) => ({ ...current, parityFolios }))} /><SwitchField label="Ocultar fólio de abertura" description="Não mostra o número na primeira página de cada capítulo ou seção" checked={settings.hideInitialFolios} onCheckedChange={(hideInitialFolios) => setSettings((current) => ({ ...current, hideInitialFolios }))} />{settings.romanFrontMatter && <Field label="Fólios romanos"><Select value={settings.romanNumeralCase} onValueChange={(romanNumeralCase: RomanNumeralCase) => setSettings((current) => ({ ...current, romanNumeralCase }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="lower">Minúsculos · i, ii, iii</SelectItem><SelectItem value="upper">Maiúsculos · I, II, III</SelectItem></SelectContent></Select></Field>}</div>
+              <div className="print-parity-controls"><SwitchField label="Margens espelhadas" description="Gutter maior no lado interno de cada página impressa" checked={settings.mirroredMargins} onCheckedChange={(mirroredMargins) => setSettings((current) => ({ ...current, mirroredMargins }))} />{settings.mirroredMargins && <RangeField label="Gutter interno" value={settings.gutterMargin} min={0} max={15} step={1} suffix=" mm" onChange={(gutterMargin) => setSettings((current) => ({ ...current, gutterMargin }))} />}<SwitchField label="Capítulo no recto" description="Força a abertura de cada capítulo em página ímpar" checked={settings.startChaptersOnRecto} onCheckedChange={(startChaptersOnRecto) => setSettings((current) => ({ ...current, startChaptersOnRecto }))} /><SwitchField label="Fólio por paridade" description="Posiciona o número na margem externa de páginas pares e ímpares" checked={settings.parityFolios} onCheckedChange={(parityFolios) => setSettings((current) => ({ ...current, parityFolios }))} /><SwitchField label="Ocultar fólio em capítulos" description="Não mostra o número na primeira página de cada capítulo" checked={settings.hideChapterInitialFolios} onCheckedChange={(hideChapterInitialFolios) => setSettings((current) => ({ ...current, hideChapterInitialFolios }))} /><SwitchField label="Ocultar fólio em seções" description="Não mostra o número na página de abertura de cada seção ou ato" checked={settings.hideSectionInitialFolios} onCheckedChange={(hideSectionInitialFolios) => setSettings((current) => ({ ...current, hideSectionInitialFolios }))} />{settings.romanFrontMatter && <Field label="Fólios romanos"><Select value={settings.romanNumeralCase} onValueChange={(romanNumeralCase: RomanNumeralCase) => setSettings((current) => ({ ...current, romanNumeralCase }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="lower">Minúsculos · i, ii, iii</SelectItem><SelectItem value="upper">Maiúsculos · I, II, III</SelectItem></SelectContent></Select></Field>}</div>
               </section>
 
               <section className="settings-card">
@@ -1176,14 +1178,14 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
           {settings.includeActs && group.act !== "Sem seção" && (
             <article className="book-page act-opening">
               <div className="act-opening-content"><span className="book-label">NOVA SEÇÃO</span><div className="act-marker">{String(groups.indexOf(group) + 1).padStart(2, "0")}</div><h2>{group.act}</h2></div>
-              {renderFolio(groupIsPreTextual ? "roman" : "arabic", settings.hideInitialFolios)}
+              {renderFolio(groupIsPreTextual ? "roman" : "arabic", settings.hideSectionInitialFolios)}
             </article>
           )}
           {group.chapters.map((chapter) => (
             <article className="book-page chapter-page" key={chapter.id}>
               {settings.includeHeader && <div className="print-running-head"><span>{metadata.title}</span><span>{group.act}</span></div>}
               <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className={`book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedMarkdown(chapter.content, assetUrls, chapter.title, true) }} /></div>
-              {renderFolio(settings.romanFrontMatter && (groupIsPreTextual || isPreTextual(group.act, chapter.title)) ? "roman" : "arabic", settings.hideInitialFolios)}
+              {renderFolio(settings.romanFrontMatter && (groupIsPreTextual || isPreTextual(group.act, chapter.title)) ? "roman" : "arabic", settings.hideChapterInitialFolios)}
             </article>
           ))}
         </div>;
