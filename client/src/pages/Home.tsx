@@ -107,6 +107,17 @@ type PrintSettings = {
 };
 
 type ImportEntry = { path: string; file: File };
+type LocalProjectSnapshot = {
+  version: 1;
+  savedAt: string;
+  hasProject: boolean;
+  metadata: BookMeta;
+  chapters: Chapter[];
+  settings: PrintSettings;
+  activeId: string;
+  openActs: Record<string, boolean>;
+  imageCount: number;
+};
 
 // Oficina Editorial: no GitHub Pages, os recursos vivem em public/assets; no preview, usam o armazenamento do projeto.
 const pageAsset = (filename: string, manusPath: string) => import.meta.env.BASE_URL === "/" ? manusPath : `${import.meta.env.BASE_URL}assets/${filename}`;
@@ -114,6 +125,7 @@ const BRAND_LOGO = pageAsset("caderno-colophon-logo.png", "/manus-storage/cadern
 const WELCOME_IMAGE = pageAsset("editorial-workbench-welcome.jpg", "/manus-storage/editorial-workbench-welcome_606eee42.jpg");
 const DEFAULT_COVER = pageAsset("folio-abstract-cover.jpg", "/manus-storage/folio-abstract-cover_d8d1fef8.jpg");
 const PAPER_TEXTURE = pageAsset("printing-forms-texture.jpg", "/manus-storage/printing-forms-texture_ffb0287d.jpg");
+const LOCAL_PROJECT_KEY = "caderno.local-project.v1";
 
 const defaultPrintSettings: PrintSettings = {
   pageFormat: "A5",
@@ -288,6 +300,7 @@ export default function Home() {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const createdUrlsRef = useRef<string[]>([]);
+  const localStorageReadyRef = useRef(false);
   const [tab, setTab] = useState<Tab>("editar");
   const [hasProject, setHasProject] = useState(false);
   const [metadata, setMetadata] = useState<BookMeta>({ title: "", author: "", description: "" });
@@ -300,6 +313,8 @@ export default function Home() {
   const [loadingImport, setLoadingImport] = useState(false);
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [exportingEpub, setExportingEpub] = useState(false);
+  const [lastLocalSave, setLastLocalSave] = useState<string | null>(null);
+  const [restoredImageCount, setRestoredImageCount] = useState(0);
   const [settings, setSettings] = useState<PrintSettings>(defaultPrintSettings);
 
   const activeChapter = chapters.find((chapter) => chapter.id === activeId) ?? chapters[0];
@@ -318,6 +333,43 @@ export default function Home() {
   useEffect(() => {
     return () => createdUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_PROJECT_KEY);
+      if (!raw) return;
+      const snapshot = JSON.parse(raw) as Partial<LocalProjectSnapshot>;
+      if (snapshot.version !== 1 || !snapshot.hasProject || !Array.isArray(snapshot.chapters) || !snapshot.metadata) return;
+      setMetadata(snapshot.metadata);
+      setChapters(snapshot.chapters);
+      setSettings({ ...defaultPrintSettings, ...snapshot.settings });
+      setActiveId(snapshot.activeId || snapshot.chapters[0]?.id || "");
+      setOpenActs(snapshot.openActs ?? {});
+      setHasProject(true);
+      setLastLocalSave(snapshot.savedAt ?? null);
+      setRestoredImageCount(snapshot.imageCount ?? 0);
+      toast.success("Rascunho local restaurado neste navegador.");
+    } catch {
+      window.localStorage.removeItem(LOCAL_PROJECT_KEY);
+    } finally {
+      localStorageReadyRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!localStorageReadyRef.current || !hasProject) return;
+    const handle = window.setTimeout(() => {
+      const savedAt = new Date().toISOString();
+      const snapshot: LocalProjectSnapshot = { version: 1, savedAt, hasProject, metadata, chapters, settings, activeId, openActs, imageCount: assets.length };
+      try {
+        window.localStorage.setItem(LOCAL_PROJECT_KEY, JSON.stringify(snapshot));
+        setLastLocalSave(savedAt);
+      } catch {
+        toast.error("O navegador não conseguiu salvar este rascunho localmente.");
+      }
+    }, 650);
+    return () => window.clearTimeout(handle);
+  }, [activeId, assets.length, chapters, hasProject, metadata, openActs, settings]);
 
   const updateChapter = useCallback((id: string, changes: Partial<Chapter>) => {
     setChapters((current) => current.map((chapter) => (chapter.id === id ? { ...chapter, ...changes } : chapter)));
@@ -843,8 +895,8 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
 
         <Button variant="ghost" className="add-chapter-button" onClick={addChapter}><Plus size={16} /> Novo capítulo</Button>
         <div className="spine-footer">
-          <div><Check size={15} /><span>Alterações nesta sessão</span></div>
-          <small>Salvo em memória</small>
+          <div><Check size={15} /><span>Rascunho local protegido</span></div>
+          <small>{lastLocalSave ? `Salvo às ${new Date(lastLocalSave).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Preparando salvamento automático"}</small>
         </div>
       </aside>
 
@@ -1031,7 +1083,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
           <div><ImageIcon size={16} /><span><strong>{Object.keys(assetUrls).length}</strong> imagens locais</span></div>
           <div><PanelLeft size={16} /><span><strong>{groups.length}</strong> atos / seções</span></div>
         </section>
-        <div className="rail-note"><span>Local e privado</span><p>Os arquivos ficam apenas nesta sessão do navegador.</p></div>
+        <div className="rail-note"><span>Local e privado</span><p>Texto, estrutura e configurações são salvos automaticamente neste navegador.{restoredImageCount > 0 && " Reenvie as imagens do rascunho restaurado antes de exportar."}</p></div>
       </aside>
 
       <div className="print-root">

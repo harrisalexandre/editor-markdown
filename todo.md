@@ -1,5 +1,7 @@
 # Publicação para teste — Caderno
 
+- [x] Implementar salvamento automático e restauração local de manuscrito, metadados e configurações sem persistir arquivos binários.
+- [x] Entregar auditoria de recursos profissionais e uma priorização por impacto e esforço, sem implementar os itens da auditoria nesta etapa.
 - [x] Remover qualquer duplicação de títulos entre Markdown, pré-visualização, montagem, impressão e ePub.
 - [x] Adicionar controles de capitular, incluindo ativação, fonte, tamanho e cor.
 - [x] Corrigir o fluxo de impressão para impedir cortes de conteúdo e configurar posição da numeração.
