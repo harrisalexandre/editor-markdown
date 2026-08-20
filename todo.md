@@ -1,5 +1,6 @@
 # Publicação para teste — Caderno
 
+- [x] Exibir uma prévia em tempo real de fólios, paridade e páginas de abertura antes da exportação PDF.
 - [x] Separar a ocultação de fólios iniciais em controles independentes para capítulos e seções.
 - [x] Permitir ocultar a numeração na primeira página de cada capítulo ou seção impressa.
 - [x] Permitir escolher algarismos romanos maiúsculos ou minúsculos nos fólios pré-textuais.

@@ -116,6 +116,15 @@ type PrintSettings = {
 };
 
 type ImportEntry = { path: string; file: File };
+type PaginationPreviewEntry = {
+  id: string;
+  label: string;
+  physicalPage: number;
+  folio: string | null;
+  side: "recto" | "verso";
+  hidden: boolean;
+  series: "roman" | "arabic" | "none";
+};
 type LocalProjectSnapshot = {
   version: 1;
   savedAt: string;
@@ -323,6 +332,30 @@ const toRoman = (value: number, numeralCase: RomanNumeralCase) => {
 };
 
 const isPreTextual = (act: string, title = "") => /introdu[cç][aã]o|pref[aá]cio|apresenta[cç][aã]o|dedicat[oó]ria|agradecimento|nota do autor/i.test(`${act} ${title}`);
+
+function buildPaginationPreview(groups: { act: string; chapters: Chapter[] }[], settings: PrintSettings): PaginationPreviewEntry[] {
+  const entries: PaginationPreviewEntry[] = [];
+  let physicalPage = 1;
+  let romanPage = 1;
+  let arabicPage = 1;
+  const add = (id: string, label: string, series: "roman" | "arabic" | "none", hidden = false) => {
+    const folio = series === "roman" ? toRoman(romanPage++, settings.romanNumeralCase) : series === "arabic" ? String(arabicPage++) : null;
+    entries.push({ id, label, physicalPage, folio, side: physicalPage % 2 === 0 ? "verso" : "recto", hidden, series });
+    physicalPage += 1;
+  };
+  if (settings.includeCover) add("cover", "Capa", "none");
+  if (settings.includeToc) add("toc", "Sumário", settings.romanFrontMatter ? "roman" : "arabic");
+  groups.forEach((group, groupIndex) => {
+    const preTextual = settings.romanFrontMatter && isPreTextual(group.act);
+    const groupSeries = preTextual ? "roman" : "arabic";
+    if (settings.includeActs && group.act !== "Sem seção") add(`act-${groupIndex}`, `Seção · ${group.act}`, groupSeries, settings.hideSectionInitialFolios);
+    group.chapters.forEach((chapter) => {
+      const chapterSeries = settings.romanFrontMatter && (preTextual || isPreTextual(group.act, chapter.title)) ? "roman" : "arabic";
+      add(chapter.id, `Capítulo · ${chapter.title}`, chapterSeries, settings.hideChapterInitialFolios);
+    });
+  });
+  return entries;
+}
 
 export default function Home() {
   const zipInputRef = useRef<HTMLInputElement>(null);
@@ -1142,6 +1175,14 @@ function RangeField({ label, value, min, max, step, suffix, onChange }: { label:
 
 function SwitchField({ label, description, checked, onCheckedChange }: { label: string; description: string; checked: boolean; onCheckedChange: (value: boolean) => void }) {
   return <div className="switch-field"><div><strong>{label}</strong><span>{description}</span></div><Switch checked={checked} onCheckedChange={onCheckedChange} /></div>;
+}
+
+function PaginationLedger({ entries }: { entries: PaginationPreviewEntry[] }) {
+  return <aside className="pagination-ledger" aria-label="Prévia de paginação em tempo real">
+    <div className="pagination-ledger-head"><div><span>REGISTRO DE FÓLIOS</span><strong>Prévia em tempo real</strong></div><small>atualiza com as opções de impressão</small></div>
+    <div className="pagination-ledger-track">{entries.map((entry) => <div key={entry.id} className={`pagination-chip ${entry.side} ${entry.hidden ? "is-hidden" : ""}`} title={`${entry.label} · página física ${entry.physicalPage}`}><b>{entry.folio ?? "—"}</b><span>{entry.side === "recto" ? "R" : "V"}</span><em>{entry.hidden ? "fólio oculto" : entry.label}</em></div>)}</div>
+    <p>R = recto (ímpar) · V = verso (par). A sequência é recalculada ao alterar capa, sumário, seções ou regras de fólio.</p>
+  </aside>;
 }
 
 function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className }: { metadata: BookMeta; groups: { act: string; chapters: Chapter[] }[]; settings: PrintSettings; assetUrls: Record<string, string>; coverUrl: string; className: string }) {
