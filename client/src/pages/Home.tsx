@@ -117,6 +117,13 @@ type PrintSettings = {
 };
 
 type ImportEntry = { path: string; file: File };
+type DroppedEntry = {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+  file?: (success: (file: File) => void, failure?: (error: DOMException) => void) => void;
+  createReader?: () => { readEntries: (success: (entries: DroppedEntry[]) => void, failure?: (error: DOMException) => void) => void };
+};
 type PaginationPreviewEntry = {
   id: string;
   label: string;
@@ -242,6 +249,37 @@ const isMarkdown = (path: string) => /\.md(?:own)?$/i.test(path);
 const isImage = (path: string) => /\.(png|jpe?g|svg|webp|gif)$/i.test(path);
 const isCoverPath = (path: string) => /(^|\/)(capa|cover)(\.|[-_])/i.test(path);
 const baseName = (path: string) => path.split("/").at(-1) ?? path;
+const imageAccept = "image/png,image/jpeg,image/webp,image/svg+xml,image/gif";
+
+async function readDroppedEntries(items: DataTransferItem[], fallbackFiles: File[]): Promise<ImportEntry[]> {
+  const entryFromItem = (item: DataTransferItem) => (item as DataTransferItem & { webkitGetAsEntry?: () => DroppedEntry | null }).webkitGetAsEntry?.() ?? null;
+  const readAllDirectoryEntries = async (reader: NonNullable<DroppedEntry["createReader"]> extends () => infer Reader ? Reader : never) => {
+    const entries: DroppedEntry[] = [];
+    while (true) {
+      const batch = await new Promise<DroppedEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+      if (!batch.length) return entries;
+      entries.push(...batch);
+    }
+  };
+  const readEntry = async (entry: DroppedEntry, prefix = ""): Promise<ImportEntry[]> => {
+    if (entry.isFile && entry.file) {
+      const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
+      return [{ path: `${prefix}${entry.name}`, file }];
+    }
+    if (entry.isDirectory && entry.createReader) {
+      const children = await readAllDirectoryEntries(entry.createReader());
+      const nested = await Promise.all(children.map((child) => readEntry(child, `${prefix}${entry.name}/`)));
+      return nested.flat();
+    }
+    return [];
+  };
+  const droppedEntries = items.flatMap((item) => {
+    const entry = entryFromItem(item);
+    return entry ? [entry as unknown as DroppedEntry] : [];
+  });
+  const entries = (await Promise.all(droppedEntries.map((entry) => readEntry(entry)))).flat();
+  return entries.length ? entries : fallbackFiles.map((file) => ({ path: file.name, file }));
+}
 const mimeFromPath = (path: string) => {
   const extension = path.split(".").at(-1)?.toLowerCase();
   const types: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", svg: "image/svg+xml", webp: "image/webp", gif: "image/gif" };
@@ -380,6 +418,8 @@ function buildPaginationPreview(groups: { act: string; chapters: Chapter[] }[], 
 export default function Home() {
   const zipInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const assetInputRef = useRef<HTMLInputElement>(null);
+  const assetFolderInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const createdUrlsRef = useRef<string[]>([]);
@@ -412,7 +452,9 @@ export default function Home() {
   useEffect(() => {
     folderInputRef.current?.setAttribute("webkitdirectory", "");
     folderInputRef.current?.setAttribute("directory", "");
-  }, []);
+    assetFolderInputRef.current?.setAttribute("webkitdirectory", "");
+    assetFolderInputRef.current?.setAttribute("directory", "");
+  }, [hasProject]);
 
   useEffect(() => {
     return () => createdUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -573,13 +615,69 @@ export default function Home() {
     }
   };
 
+  const importSeparateAssets = (entries: ImportEntry[]) => {
+    if (!hasProject) {
+      toast.error("Abra ou crie um manuscrito antes de adicionar assets separados.");
+      return;
+    }
+    const images = entries.filter((entry) => isImage(entry.path));
+    if (!images.length) {
+      toast.error("Não encontrei imagens PNG, JPG, WebP, SVG ou GIF nessa seleção.");
+      return;
+    }
+    const existingPaths = new Set(assets.map((asset) => asset.path));
+    const newAssets = images.map((entry) => {
+      const normalized = normalizePath(entry.path).replace(/^\/+/, "");
+      const parts = normalized.split("/").filter(Boolean);
+      const assetsIndex = parts.findIndex((part) => part.toLowerCase() === "assets");
+      const relativePath = assetsIndex >= 0 ? parts.slice(assetsIndex + 1).join("/") : baseName(normalized);
+      const extension = relativePath.split(".").at(-1)?.toLowerCase() || "png";
+      const stem = relativePath.replace(/\.[^.]+$/, "") || "imagem";
+      let path = `assets/${relativePath || `imagem.${extension}`}`;
+      let duplicate = 2;
+      while (existingPaths.has(path)) {
+        path = `assets/${stem}-${duplicate}.${extension}`;
+        duplicate += 1;
+      }
+      existingPaths.add(path);
+      return { path, file: new File([entry.file], baseName(path), { type: entry.file.type || mimeFromPath(path) }) };
+    });
+    const nextUrls: Record<string, string> = {};
+    newAssets.forEach((asset) => {
+      const url = URL.createObjectURL(asset.file);
+      createdUrlsRef.current.push(url);
+      nextUrls[asset.path] = url;
+    });
+    setAssets((current) => [...current, ...newAssets]);
+    setAssetUrls((current) => ({ ...current, ...nextUrls }));
+    toast.success(`${newAssets.length} asset(s) adicionado(s). Use os caminhos assets/... no Markdown.`);
+  };
+
+  const handleAssetFilesInput = (event: ChangeEvent<HTMLInputElement>) => {
+    importSeparateAssets(Array.from(event.target.files ?? []).map((file) => ({ path: file.name, file })));
+    event.target.value = "";
+  };
+
+  const handleAssetFolderInput = (event: ChangeEvent<HTMLInputElement>) => {
+    importSeparateAssets(Array.from(event.target.files ?? []).map((file) => ({ path: file.webkitRelativePath || file.name, file })));
+    event.target.value = "";
+  };
+
   const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDropTarget(false);
-    const file = Array.from(event.dataTransfer.files).at(0);
-    if (!file) return;
-    if (file.name.toLowerCase().endsWith(".zip")) await importZip(file);
-    else toast.error("Arraste um arquivo .zip. Para escolher uma pasta, use o botão “Escolher pasta”.");
+    const droppedFiles = Array.from(event.dataTransfer.files);
+    const zip = droppedFiles.find((file) => file.name.toLowerCase().endsWith(".zip"));
+    if (zip) {
+      await importZip(zip);
+      return;
+    }
+    try {
+      const entries = await readDroppedEntries(Array.from(event.dataTransfer.items), droppedFiles);
+      await hydrateProject(entries);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não encontrei arquivos Markdown na pasta arrastada.");
+    }
   };
 
   const createNewBook = () => {
@@ -878,7 +976,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
             <div className="drop-folio">01</div>
             <div className="start-drop-icon">{loadingImport ? <LoaderCircle className="spin" size={24} /> : <Upload size={24} />}</div>
             <strong>{loadingImport ? "Lendo o projeto..." : "Suba um livro para organizar"}</strong>
-            <p>Arraste um ZIP com arquivos <code>.md</code>, <code>index.json</code> opcional e a pasta <code>assets/</code>.</p>
+            <p>Arraste um ZIP ou uma pasta com arquivos <code>.md</code>, <code>index.json</code> opcional e <code>assets/</code>.</p>
             <div className="drop-rule" />
             <small>Os arquivos permanecem nesta sessão do navegador.</small>
           </section>
@@ -1161,15 +1259,24 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
           <div className="import-ledger"><span>ENTRADA DE ARQUIVOS</span><i>□</i></div>
           <div className="import-icon">{loadingImport ? <LoaderCircle className="spin" size={21} /> : <FileArchive size={21} />}</div>
           <strong>{loadingImport ? "Lendo o manuscrito..." : "Receber manuscrito"}</strong>
-          <p>ZIP com `.md`, `index.json` e `assets/`.</p>
+          <p>ZIP traz `.md`, `index.json` e `assets/` juntos. Pasta traz a mesma estrutura sem compactar.</p>
           <div className="import-buttons">
             <Button size="sm" variant="outline" disabled={loadingImport} onClick={() => zipInputRef.current?.click()}><Upload size={14} /> Enviar ZIP</Button>
             <Button size="sm" variant="ghost" disabled={loadingImport} onClick={() => folderInputRef.current?.click()}><FolderOpen size={14} /> Pasta</Button>
           </div>
+          <div className="asset-import-separator"><span>ASSETS SEPARADOS</span></div>
+          <strong>Adicionar imagens ao projeto</strong>
+          <p>Selecione arquivos ou uma pasta <code>assets/</code>. O manuscrito atual não será substituído.</p>
+          <div className="import-buttons">
+            <Button size="sm" variant="outline" onClick={() => assetInputRef.current?.click()}><ImageIcon size={14} /> Arquivos</Button>
+            <Button size="sm" variant="ghost" onClick={() => assetFolderInputRef.current?.click()}><FolderOpen size={14} /> Pasta assets</Button>
+          </div>
           <input ref={zipInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={handleZipInput} />
           <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderInput} />
-          <input ref={coverInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" className="hidden" onChange={handleCoverInput} />
-          <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" multiple className="hidden" onChange={handleInlineImages} />
+          <input ref={assetInputRef} type="file" accept={imageAccept} multiple className="hidden" onChange={handleAssetFilesInput} />
+          <input ref={assetFolderInputRef} type="file" multiple className="hidden" onChange={handleAssetFolderInput} />
+          <input ref={coverInputRef} type="file" accept={imageAccept} className="hidden" onChange={handleCoverInput} />
+          <input ref={imageInputRef} type="file" accept={imageAccept} multiple className="hidden" onChange={handleInlineImages} />
         </section>
 
         <section className="project-stats"><div className="inventory-label"><span>INVENTÁRIO DA OFICINA</span><i>✣</i></div>

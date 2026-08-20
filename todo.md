@@ -1,5 +1,6 @@
 # Publicação para teste — Caderno
 
+- [x] Permitir importar imagens e pasta de assets separadamente, além do ZIP completo do projeto.
 - [x] Manter imagens grandes íntegras e proporcionais, levando-as para a próxima folha A5 quando necessário.
 - [x] Substituir a rolagem interna da montagem por conteúdo repartido automaticamente entre folhas sequenciais reais.
 - [ ] Permitir declarar que a capa enviada já contém título e autor, evitando sobreposições editoriais.
