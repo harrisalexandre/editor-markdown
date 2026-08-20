@@ -1,5 +1,11 @@
 # Publicação para teste — Caderno
 
+- [x] Remover qualquer duplicação de títulos entre Markdown, pré-visualização, montagem, impressão e ePub.
+- [x] Adicionar controles de capitular, incluindo ativação, fonte, tamanho e cor.
+- [x] Corrigir o fluxo de impressão para impedir cortes de conteúdo e configurar posição da numeração.
+- [x] Permitir enviar, definir e trocar a imagem de capa e imagens internas com inserção de Markdown assistida.
+- [x] Ampliar os controles de fonte do corpo, tamanho, cores e estilo do livro.
+- [x] Gerar e baixar um ePub válido com metadados, capítulos, imagens locais e capa quando disponível.
 - [x] Fazer com que Preparar prova e Ctrl+P imprimam somente a composição completa do livro.
 - [x] Substituir o livro-exemplo por uma abertura vazia com as opções Novo livro e Subir arquivo .zip.
 - [x] Analisar o conteúdo anexado e identificar se o bloqueio depende de código ou de uma configuração externa.

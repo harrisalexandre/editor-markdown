@@ -56,6 +56,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 type Tab = "editar" | "montar" | "configurar";
 type ExportScope = "livro" | "capitulo" | "ato";
 type PageFormat = "A4" | "A5" | "Carta" | "Custom";
+type PageNumberPosition = "footer-center" | "footer-left" | "footer-right" | "header-left" | "header-center" | "header-right";
 
 type Chapter = {
   id: string;
@@ -94,6 +95,14 @@ type PrintSettings = {
   includeActs: boolean;
   includeNumbers: boolean;
   includeHeader: boolean;
+  pageNumberPosition: PageNumberPosition;
+  bodyColor: string;
+  paperColor: string;
+  accentColor: string;
+  dropCapEnabled: boolean;
+  dropCapFont: "Playfair Display" | "Cormorant Garamond" | "Georgia";
+  dropCapColor: string;
+  dropCapLines: number;
   scope: ExportScope;
 };
 
@@ -123,6 +132,14 @@ const defaultPrintSettings: PrintSettings = {
   includeActs: true,
   includeNumbers: true,
   includeHeader: true,
+  pageNumberPosition: "footer-center",
+  bodyColor: "#38352f",
+  paperColor: "#fbf8f0",
+  accentColor: "#b64036",
+  dropCapEnabled: false,
+  dropCapFont: "Playfair Display",
+  dropCapColor: "#b64036",
+  dropCapLines: 3,
   scope: "livro",
 };
 
@@ -183,6 +200,7 @@ As margens largas ofereciam um lugar para respirar. As palavras, finalmente, tin
 const normalizePath = (value: string) => value.replaceAll("\\", "/").replace(/^\.\//, "");
 const isMarkdown = (path: string) => /\.md(?:own)?$/i.test(path);
 const isImage = (path: string) => /\.(png|jpe?g|svg|webp|gif)$/i.test(path);
+const isCoverPath = (path: string) => /(^|\/)(capa|cover)(\.|[-_])/i.test(path);
 const baseName = (path: string) => path.split("/").at(-1) ?? path;
 const mimeFromPath = (path: string) => {
   const extension = path.split(".").at(-1)?.toLowerCase();
@@ -223,9 +241,9 @@ function markdownWithLocalImages(source: string, assetUrls: Record<string, strin
   });
 }
 
-function renderedMarkdown(source: string, assetUrls: Record<string, string>, displayedTitle?: string) {
+function renderedMarkdown(source: string, assetUrls: Record<string, string>, displayedTitle?: string, stripFirstHeading = false) {
   const firstHeading = source.match(/^\s*#\s+(.+?)\s*(?:\r?\n|$)/);
-  const content = firstHeading && displayedTitle && firstHeading[1].trim().toLocaleLowerCase("pt-BR") === displayedTitle.trim().toLocaleLowerCase("pt-BR")
+  const content = firstHeading && (stripFirstHeading || (displayedTitle && firstHeading[1].trim().toLocaleLowerCase("pt-BR") === displayedTitle.trim().toLocaleLowerCase("pt-BR")))
     ? source.slice(firstHeading[0].length).replace(/^\s*\r?\n/, "")
     : source;
   const html = marked.parse(markdownWithLocalImages(content, assetUrls), { async: false, breaks: true, gfm: true }) as string;
@@ -233,6 +251,24 @@ function renderedMarkdown(source: string, assetUrls: Record<string, string>, dis
     ADD_ATTR: ["target"],
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|ftp|tel|data|blob):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
+}
+
+const xmlEscape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+const epubSafePath = (value: string) => normalizePath(value).replace(/^(?:\.\.\/)+/, "").replace(/^\/+/, "");
+const epubFilename = (value: string) => (value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "livro");
+const xhtmlize = (html: string) => html
+  .replace(/<br\s*\/?>/gi, "<br />")
+  .replace(/<hr\s*\/?>/gi, "<hr />")
+  .replace(/<img\b([^>]*)>/gi, (_match, attributes) => `<img${String(attributes).replace(/\/\s*$/, "").trimEnd()} />`);
+
+function epubChapterMarkup(chapter: Chapter, imageHrefs: Record<string, string>) {
+  const content = xhtmlize(renderedMarkdown(chapter.content, imageHrefs, chapter.title, true));
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="pt-BR" lang="pt-BR">
+  <head><title>${xmlEscape(chapter.title)}</title><link rel="stylesheet" type="text/css" href="../styles/book.css" /></head>
+  <body><article class="chapter"><h1>${xmlEscape(chapter.title)}</h1>${content}</article></body>
+</html>`;
 }
 
 function groupChapters(chapters: Chapter[]) {
@@ -249,6 +285,8 @@ function groupChapters(chapters: Chapter[]) {
 export default function Home() {
   const zipInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const createdUrlsRef = useRef<string[]>([]);
   const [tab, setTab] = useState<Tab>("editar");
   const [hasProject, setHasProject] = useState(false);
@@ -261,6 +299,7 @@ export default function Home() {
   const [openActs, setOpenActs] = useState<Record<string, boolean>>({});
   const [loadingImport, setLoadingImport] = useState(false);
   const [isDropTarget, setIsDropTarget] = useState(false);
+  const [exportingEpub, setExportingEpub] = useState(false);
   const [settings, setSettings] = useState<PrintSettings>(defaultPrintSettings);
 
   const activeChapter = chapters.find((chapter) => chapter.id === activeId) ?? chapters[0];
@@ -428,6 +467,67 @@ export default function Home() {
     toast.success("Livro vazio criado. Dê um título e comece a escrever.");
   };
 
+  const addVisualAssets = (files: File[], purpose: "cover" | "inline") => {
+    const images = files.filter((file) => isImage(file.name));
+    if (!images.length) {
+      toast.error("Escolha ao menos uma imagem em PNG, JPG, WebP, SVG ou GIF.");
+      return;
+    }
+
+    const selected = purpose === "cover" ? images.slice(0, 1) : images;
+    const existingPaths = new Set(assets.map((asset) => asset.path));
+    const newAssets = selected.map((file, index) => {
+      const extension = file.name.split(".").at(-1)?.toLowerCase() || "png";
+      const originalStem = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "") || `imagem-${index + 1}`;
+      let path = purpose === "cover" ? `assets/capa.${extension}` : `assets/${originalStem}.${extension}`;
+      let duplicate = 2;
+      while (purpose !== "cover" && existingPaths.has(path)) {
+        path = `assets/${originalStem}-${duplicate}.${extension}`;
+        duplicate += 1;
+      }
+      existingPaths.add(path);
+      return { path, file: new File([file], baseName(path), { type: file.type || mimeFromPath(path) }) };
+    });
+
+    const nextUrls: Record<string, string> = {};
+    newAssets.forEach((asset) => {
+      const url = URL.createObjectURL(asset.file);
+      createdUrlsRef.current.push(url);
+      nextUrls[asset.path] = url;
+    });
+    if (purpose === "cover") {
+      setAssets((current) => [...current.filter((asset) => !isCoverPath(asset.path)), ...newAssets]);
+      setAssetUrls((current) => {
+        const next = { ...current };
+        Object.entries(next).filter(([path]) => isCoverPath(path)).forEach(([path, url]) => {
+          URL.revokeObjectURL(url);
+          delete next[path];
+        });
+        return { ...next, ...nextUrls };
+      });
+      toast.success("Capa definida para a montagem, impressão e ePub.");
+      return;
+    }
+
+    setAssets((current) => [...current, ...newAssets]);
+    setAssetUrls((current) => ({ ...current, ...nextUrls }));
+    if (activeChapter) {
+      const imageMarkdown = newAssets.map((asset) => `![${baseName(asset.path).replace(/\.[^.]+$/, "")}](${asset.path})`).join("\n\n");
+      updateChapter(activeChapter.id, { content: `${activeChapter.content.trimEnd()}${activeChapter.content.trim() ? "\n\n" : ""}${imageMarkdown}\n` });
+    }
+    toast.success(`${newAssets.length} imagem(ns) inserida(s) no capítulo atual.`);
+  };
+
+  const handleCoverInput = (event: ChangeEvent<HTMLInputElement>) => {
+    addVisualAssets(Array.from(event.target.files ?? []), "cover");
+    event.target.value = "";
+  };
+
+  const handleInlineImages = (event: ChangeEvent<HTMLInputElement>) => {
+    addVisualAssets(Array.from(event.target.files ?? []), "inline");
+    event.target.value = "";
+  };
+
   const moveChapter = (dragId: string, targetId: string) => {
     if (dragId === targetId) return;
     setChapters((current) => {
@@ -501,6 +601,91 @@ export default function Home() {
 
   const outputGroups = useMemo(() => groupChapters(chaptersForOutput), [chaptersForOutput]);
   const printTitle = settings.scope === "livro" ? metadata.title : settings.scope === "ato" ? activeChapter?.act || metadata.title : activeChapter?.title || metadata.title;
+
+  const downloadEpub = async () => {
+    if (!chaptersForOutput.length) {
+      toast.error("Selecione pelo menos um capítulo incluído para exportar o ePub.");
+      return;
+    }
+
+    setExportingEpub(true);
+    try {
+      const zip = new JSZip();
+      const identifier = crypto.randomUUID?.() ?? `caderno-${Date.now()}`;
+      const chaptersForEpub = chaptersForOutput.map((chapter, index) => ({ chapter, id: `chapter-${index + 1}`, href: `text/chapter-${String(index + 1).padStart(3, "0")}.xhtml` }));
+      const chapterById = new Map(chaptersForEpub.map((entry) => [entry.chapter.id, entry]));
+      const imageAssets = assets.filter((asset) => isImage(asset.path));
+      const imageHrefs: Record<string, string> = {};
+      const imageEntries = imageAssets.map((asset, index) => {
+        const normalizedPath = epubSafePath(asset.path);
+        const filename = epubSafePath(normalizedPath.replace(/^assets\//i, "")) || `imagem-${index + 1}`;
+        const href = `images/${filename}`;
+        imageHrefs[normalizedPath] = `../${href}`;
+        imageHrefs[`assets/${normalizedPath.replace(/^assets\//i, "")}`] = `../${href}`;
+        return { asset, id: `image-${index + 1}`, href, mediaType: mimeFromPath(normalizedPath), normalizedPath };
+      });
+      const coverImage = imageEntries.find((entry) => /(^|\/)(capa|cover)(\.|[-_])/i.test(entry.normalizedPath));
+      const groupsForEpub = groupChapters(chaptersForOutput);
+      const safeTitle = metadata.title.trim() || "Livro sem título";
+      const safeAuthor = metadata.author.trim() || "Autor não informado";
+      const titlePage = `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="pt-BR" lang="pt-BR">
+  <head><title>${xmlEscape(safeTitle)}</title><link rel="stylesheet" type="text/css" href="../styles/book.css" /></head>
+  <body class="title-page">${coverImage ? `<img class="cover-image" src="../${coverImage.href}" alt="Capa de ${xmlEscape(safeTitle)}" />` : ""}<section><p class="eyebrow">EDIÇÃO DIGITAL</p><h1>${xmlEscape(safeTitle)}</h1><p class="author">${xmlEscape(safeAuthor)}</p>${metadata.description.trim() ? `<p class="description">${xmlEscape(metadata.description.trim())}</p>` : ""}</section></body>
+</html>`;
+      const navigation = `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="pt-BR" lang="pt-BR">
+  <head><title>Sumário</title><link rel="stylesheet" type="text/css" href="styles/book.css" /></head>
+  <body><nav epub:type="toc" id="toc"><h1>Sumário</h1><ol>${settings.includeCover ? `<li><a href="text/title.xhtml">${xmlEscape(safeTitle)}</a></li>` : ""}${groupsForEpub.map((group) => `<li><span>${xmlEscape(group.act)}</span><ol>${group.chapters.map((chapter) => { const entry = chapterById.get(chapter.id); return entry ? `<li><a href="${entry.href}">${xmlEscape(chapter.title)}</a></li>` : ""; }).join("")}</ol></li>`).join("")}</ol></nav></body>
+</html>`;
+      const styleSheet = `@charset "utf-8";
+body { margin: 5%; color: #20201d; font-family: Georgia, serif; font-size: 1em; line-height: 1.6; }
+h1, h2 { color: #292622; font-family: Georgia, serif; line-height: 1.15; }
+h1 { margin: 0 0 1.2em; font-size: 1.8em; } h2 { margin-top: 1.8em; }
+p { margin: 0 0 1em; } blockquote { margin: 1.5em 1em; padding-left: 1em; border-left: 3px solid #a74035; color: #5c5249; }
+img { max-width: 100%; height: auto; } .title-page { text-align: center; } .title-page section { margin-top: 15%; } .cover-image { display: block; max-height: 68vh; margin: 0 auto 2em; } .eyebrow { color: #a74035; font-family: sans-serif; font-size: .7em; font-weight: bold; letter-spacing: .16em; } .author { font-size: 1.1em; } .description { max-width: 28em; margin: 2em auto; color: #665d54; } nav ol { padding-left: 1.2em; } nav li { margin: .45em 0; } a { color: inherit; text-decoration: none; }`;
+
+      zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+      zip.file("META-INF/container.xml", `<?xml version="1.0" encoding="utf-8"?>\n<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml" /></rootfiles></container>`);
+      zip.file("OEBPS/styles/book.css", styleSheet);
+      zip.file("OEBPS/nav.xhtml", navigation);
+      if (settings.includeCover) zip.file("OEBPS/text/title.xhtml", titlePage);
+      chaptersForEpub.forEach(({ chapter, href }) => zip.file(`OEBPS/${href}`, epubChapterMarkup(chapter, imageHrefs)));
+      imageEntries.forEach(({ asset, href }) => zip.file(`OEBPS/${href}`, asset.file));
+
+      const manifest = [
+        '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav" />',
+        '<item id="book-css" href="styles/book.css" media-type="text/css" />',
+        ...(settings.includeCover ? ['<item id="title-page" href="text/title.xhtml" media-type="application/xhtml+xml" />'] : []),
+        ...chaptersForEpub.map(({ id, href }) => `<item id="${id}" href="${href}" media-type="application/xhtml+xml" />`),
+        ...imageEntries.map(({ id, href, mediaType }) => `<item id="${id}" href="${href}" media-type="${mediaType}"${id === coverImage?.id ? ' properties="cover-image"' : ""} />`),
+      ].join("\n    ");
+      const spine = [
+        ...(settings.includeCover ? ['<itemref idref="title-page" />'] : []),
+        ...chaptersForEpub.map(({ id }) => `<itemref idref="${id}" />`),
+      ].join("\n    ");
+      zip.file("OEBPS/content.opf", `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id" xml:lang="pt-BR">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">urn:uuid:${identifier}</dc:identifier><dc:title>${xmlEscape(safeTitle)}</dc:title><dc:creator>${xmlEscape(safeAuthor)}</dc:creator><dc:language>pt-BR</dc:language>${metadata.description.trim() ? `<dc:description>${xmlEscape(metadata.description.trim())}</dc:description>` : ""}<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}</meta></metadata>
+  <manifest>
+    ${manifest}
+  </manifest>
+  <spine>
+    ${spine}
+  </spine>
+</package>`);
+
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", mimeType: "application/epub+zip" });
+      downloadBlob(blob, `${epubFilename(printTitle)}.epub`);
+      toast.success("ePub preparado com capítulos, metadados e imagens locais.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível gerar o ePub.");
+    } finally {
+      setExportingEpub(false);
+    }
+  };
 
   const printBook = () => {
     if (!chaptersForOutput.length) {
@@ -583,6 +768,12 @@ export default function Home() {
         "--book-font-size": `${settings.fontSize}pt`,
         "--book-line-height": settings.lineHeight,
         "--book-indent": `${settings.paragraphIndent}mm`,
+        "--book-color": settings.bodyColor,
+        "--book-paper": settings.paperColor,
+        "--book-accent": settings.accentColor,
+        "--drop-cap-font": settings.dropCapFont,
+        "--drop-cap-color": settings.dropCapColor,
+        "--drop-cap-lines": settings.dropCapLines,
       } as React.CSSProperties}
     >
       <style media="print">{`@page { size: ${dimensions.width}mm ${dimensions.height}mm; margin: 0; }`}</style>
@@ -674,6 +865,7 @@ export default function Home() {
               <TooltipTrigger asChild><Button variant="ghost" size="icon" className="icon-action" onClick={downloadProject} aria-label="Baixar projeto ZIP"><Archive size={17} /></Button></TooltipTrigger>
               <TooltipContent>Baixar projeto atualizado (.zip)</TooltipContent>
             </Tooltip>
+            <Button variant="outline" className="epub-button" onClick={downloadEpub} disabled={exportingEpub}><BookOpen size={16} /> {exportingEpub ? "Gerando..." : "ePub"}</Button>
             <Button className="print-button" onClick={printBook}><Printer size={16} /> Preparar prova</Button>
           </div>
         </header>
@@ -692,6 +884,10 @@ export default function Home() {
                   <Tooltip>
                     <TooltipTrigger asChild><Button variant="ghost" size="icon" className="icon-action" onClick={() => downloadChapter(activeChapter)} aria-label="Baixar capítulo"><FileDown size={17} /></Button></TooltipTrigger>
                     <TooltipContent>Baixar este Markdown</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild><Button variant="ghost" size="icon" className="icon-action" onClick={() => imageInputRef.current?.click()} aria-label="Inserir imagens no capítulo"><ImageIcon size={17} /></Button></TooltipTrigger>
+                    <TooltipContent>Inserir imagens no capítulo</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild><Button variant="ghost" size="icon" className="icon-action destructive-action" onClick={() => removeChapter(activeChapter.id)} aria-label="Remover capítulo"><X size={17} /></Button></TooltipTrigger>
@@ -719,7 +915,7 @@ export default function Home() {
                   <div className="proof-running-head"><span>{metadata.title}</span><span>prova de leitura</span></div>
                   <h1>{activeChapter?.title || "Capítulo sem título"}</h1>
                   <div className="proof-rule" />
-                  <div className="markdown-body" dangerouslySetInnerHTML={{ __html: renderedMarkdown(activeChapter?.content ?? "", assetUrls, activeChapter?.title) }} />
+                  <div className={`markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedMarkdown(activeChapter?.content ?? "", assetUrls, activeChapter?.title, true) }} />
                 </article>
               </section>
             </div>
@@ -760,6 +956,7 @@ export default function Home() {
                 <div className="field-grid two-col">
                   <Field label="Formato"><Select value={settings.pageFormat} onValueChange={(value: PageFormat) => setSettings((current) => ({ ...current, pageFormat: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="A5">A5 · romance</SelectItem><SelectItem value="A4">A4 · prova</SelectItem><SelectItem value="Carta">Carta · 216 × 279 mm</SelectItem><SelectItem value="Custom">Tamanho customizado</SelectItem></SelectContent></Select></Field>
                   <Field label="Escopo de exportação"><Select value={settings.scope} onValueChange={(value: ExportScope) => setSettings((current) => ({ ...current, scope: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="livro">Livro completo</SelectItem><SelectItem value="ato">Ato atual</SelectItem><SelectItem value="capitulo">Capítulo atual</SelectItem></SelectContent></Select></Field>
+                  <Field label="Posição da numeração"><Select value={settings.pageNumberPosition} onValueChange={(value: PageNumberPosition) => setSettings((current) => ({ ...current, pageNumberPosition: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="footer-center">Rodapé central</SelectItem><SelectItem value="footer-left">Rodapé esquerdo</SelectItem><SelectItem value="footer-right">Rodapé direito</SelectItem><SelectItem value="header-left">Cabeçalho esquerdo</SelectItem><SelectItem value="header-center">Cabeçalho central</SelectItem><SelectItem value="header-right">Cabeçalho direito</SelectItem></SelectContent></Select></Field>
                 </div>
                 {settings.pageFormat === "Custom" && <div className="field-grid two-col"><Field label="Largura (mm)"><Input type="number" value={settings.customWidth} onChange={(event) => setSettings((current) => ({ ...current, customWidth: Number(event.target.value) || 1 }))} /></Field><Field label="Altura (mm)"><Input type="number" value={settings.customHeight} onChange={(event) => setSettings((current) => ({ ...current, customHeight: Number(event.target.value) || 1 }))} /></Field></div>}
                 <div className="margin-grid">
@@ -778,6 +975,7 @@ export default function Home() {
                 <RangeField label="Tamanho do corpo" value={settings.fontSize} min={9} max={15} step={0.5} suffix=" pt" onChange={(fontSize) => setSettings((current) => ({ ...current, fontSize }))} />
                 <RangeField label="Entrelinha" value={settings.lineHeight} min={1.2} max={2} step={0.05} suffix="" onChange={(lineHeight) => setSettings((current) => ({ ...current, lineHeight }))} />
                 <RangeField label="Recuo de parágrafo" value={settings.paragraphIndent} min={0} max={12} step={1} suffix=" mm" onChange={(paragraphIndent) => setSettings((current) => ({ ...current, paragraphIndent }))} />
+                <div className="color-fields"><ColorField label="Cor do texto" value={settings.bodyColor} onChange={(bodyColor) => setSettings((current) => ({ ...current, bodyColor }))} /><ColorField label="Cor do papel" value={settings.paperColor} onChange={(paperColor) => setSettings((current) => ({ ...current, paperColor }))} /><ColorField label="Tinta de destaque" value={settings.accentColor} onChange={(accentColor) => setSettings((current) => ({ ...current, accentColor }))} /></div>
               </section>
 
               <section className="settings-card settings-card-wide">
@@ -789,7 +987,8 @@ export default function Home() {
                   <SwitchField label="Numeração de página" description="Rodapé composto no preview e impressão" checked={settings.includeNumbers} onCheckedChange={(includeNumbers) => setSettings((current) => ({ ...current, includeNumbers }))} />
                   <SwitchField label="Cabeçalho corrido" description="Título do livro no alto das páginas" checked={settings.includeHeader} onCheckedChange={(includeHeader) => setSettings((current) => ({ ...current, includeHeader }))} />
                 </div>
-                <div className="settings-cta"><div><strong>Pronto para uma prova.</strong><span>A impressão abre o diálogo do navegador para salvar em PDF.</span></div><Button onClick={printBook}><Printer size={16} /> Gerar prova em PDF</Button></div>
+                <div className="drop-cap-controls"><SwitchField label="Capitular" description="Aplica uma letra inicial decorativa ao primeiro parágrafo do capítulo" checked={settings.dropCapEnabled} onCheckedChange={(dropCapEnabled) => setSettings((current) => ({ ...current, dropCapEnabled }))} />{settings.dropCapEnabled && <div className="field-grid three-col"><Field label="Fonte da capitular"><Select value={settings.dropCapFont} onValueChange={(value: PrintSettings["dropCapFont"]) => setSettings((current) => ({ ...current, dropCapFont: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Playfair Display">Playfair Display</SelectItem><SelectItem value="Cormorant Garamond">Cormorant Garamond</SelectItem><SelectItem value="Georgia">Georgia</SelectItem></SelectContent></Select></Field><ColorField label="Cor da capitular" value={settings.dropCapColor} onChange={(dropCapColor) => setSettings((current) => ({ ...current, dropCapColor }))} /><RangeField label="Altura" value={settings.dropCapLines} min={2} max={5} step={1} suffix=" linhas" onChange={(dropCapLines) => setSettings((current) => ({ ...current, dropCapLines }))} /></div>}</div>
+                <div className="settings-cta"><div><strong>Saída do livro.</strong><span>Gere uma prova PDF ou um ePub refluível para leitores digitais.</span></div><div className="settings-cta-actions"><Button variant="outline" onClick={downloadEpub} disabled={exportingEpub}><BookOpen size={16} /> {exportingEpub ? "Gerando ePub..." : "Exportar ePub"}</Button><Button onClick={printBook}><Printer size={16} /> Gerar prova em PDF</Button></div></div>
               </section>
             </div>
           </section>
@@ -804,6 +1003,7 @@ export default function Home() {
           <label>Título<Input value={metadata.title} onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))} /></label>
           <label>Autor<Input value={metadata.author} onChange={(event) => setMetadata((current) => ({ ...current, author: event.target.value }))} /></label>
           <label>Sinopse<Textarea value={metadata.description} onChange={(event) => setMetadata((current) => ({ ...current, description: event.target.value }))} /></label>
+          <div className="cover-upload"><div><span>Capa do livro</span><small>{assets.some((asset) => isCoverPath(asset.path)) ? "imagem definida" : "nenhuma capa enviada"}</small></div><Button type="button" variant="outline" size="sm" onClick={() => coverInputRef.current?.click()}><ImageIcon size={14} /> {assets.some((asset) => isCoverPath(asset.path)) ? "Trocar capa" : "Enviar capa"}</Button></div>
         </section>
 
         <section
@@ -822,6 +1022,8 @@ export default function Home() {
           </div>
           <input ref={zipInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={handleZipInput} />
           <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderInput} />
+          <input ref={coverInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" className="hidden" onChange={handleCoverInput} />
+          <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" multiple className="hidden" onChange={handleInlineImages} />
         </section>
 
         <section className="project-stats"><div className="inventory-label"><span>INVENTÁRIO DA OFICINA</span><i>✣</i></div>
@@ -847,6 +1049,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="form-field"><span>{label}</span>{children}</label>;
 }
 
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="color-field"><span>{label}</span><div><input type="color" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label} /><code>{value.toUpperCase()}</code></div></label>;
+}
+
 function RangeField({ label, value, min, max, step, suffix, onChange }: { label: string; value: number; min: number; max: number; step: number; suffix: string; onChange: (value: number) => void }) {
   return <div className="range-field"><div><span>{label}</span><strong>{value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}{suffix}</strong></div><Slider min={min} max={max} step={step} value={[value]} onValueChange={([next]) => onChange(next)} /></div>;
 }
@@ -870,7 +1076,7 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
         <article className="book-page toc-page">
           <div className="print-running-head"><span>{metadata.title}</span><span>sumário</span></div>
           <div className="book-page-content"><span className="book-label">SUMÁRIO</span><h2>Mapa do livro</h2><div className="toc-list">{groups.map((group) => <div key={group.act} className="toc-group"><strong>{group.act}</strong>{group.chapters.map((chapter, index) => <div key={chapter.id}><span>{chapter.title}</span><i /><em>{index + 1}</em></div>)}</div>)}</div></div>
-          {settings.includeNumbers && <div className="page-number">{pageIndex++}</div>}
+          {settings.includeNumbers && <div className={`page-number ${settings.pageNumberPosition}`}>{pageIndex++}</div>}
         </article>
       )}
       {groups.map((group) => (
@@ -878,14 +1084,14 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
           {settings.includeActs && group.act !== "Sem seção" && (
             <article className="book-page act-opening">
               <div className="act-opening-content"><span className="book-label">NOVA SEÇÃO</span><div className="act-marker">{String(groups.indexOf(group) + 1).padStart(2, "0")}</div><h2>{group.act}</h2></div>
-              {settings.includeNumbers && <div className="page-number">{pageIndex++}</div>}
+              {settings.includeNumbers && <div className={`page-number ${settings.pageNumberPosition}`}>{pageIndex++}</div>}
             </article>
           )}
           {group.chapters.map((chapter) => (
             <article className="book-page chapter-page" key={chapter.id}>
               {settings.includeHeader && <div className="print-running-head"><span>{metadata.title}</span><span>{group.act}</span></div>}
-              <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className="book-markdown markdown-body" dangerouslySetInnerHTML={{ __html: renderedMarkdown(chapter.content, assetUrls, chapter.title) }} /></div>
-              {settings.includeNumbers && <div className="page-number">{pageIndex++}</div>}
+              <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className={`book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedMarkdown(chapter.content, assetUrls, chapter.title, true) }} /></div>
+              {settings.includeNumbers && <div className={`page-number ${settings.pageNumberPosition}`}>{pageIndex++}</div>}
             </article>
           ))}
         </div>
