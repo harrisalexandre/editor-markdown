@@ -1,5 +1,7 @@
 # Publicação para teste — Caderno
 
+- [x] Normalizar o primeiro heading Markdown para evitar duplicação com o título editorial do capítulo e publicar a correção.
+- [x] Diagnosticar a divergência entre prévia e PDF, incluindo trim, fonte, margens, paginação e propagação de configurações, sem implementar correções.
 - [x] Exibir uma prévia em tempo real de fólios, paridade e páginas de abertura antes da exportação PDF.
 - [x] Separar a ocultação de fólios iniciais em controles independentes para capítulos e seções.
 - [x] Permitir ocultar a numeração na primeira página de cada capítulo ou seção impressa.

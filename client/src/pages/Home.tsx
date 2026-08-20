@@ -279,10 +279,24 @@ function markdownWithLocalImages(source: string, assetUrls: Record<string, strin
   });
 }
 
+const normalizeComparableTitle = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[*_`#]/g, "")
+  .replace(/[–—−]/g, "-")
+  .replace(/[^A-Za-z0-9]+/g, " ")
+  .trim()
+  .toLocaleLowerCase("pt-BR");
+
 function renderedMarkdown(source: string, assetUrls: Record<string, string>, displayedTitle?: string, stripFirstHeading = false) {
-  const firstHeading = source.match(/^\s*#\s+(.+?)\s*(?:\r?\n|$)/);
-  const content = firstHeading && (stripFirstHeading || (displayedTitle && firstHeading[1].trim().toLocaleLowerCase("pt-BR") === displayedTitle.trim().toLocaleLowerCase("pt-BR")))
-    ? source.slice(firstHeading[0].length).replace(/^\s*\r?\n/, "")
+  const firstHeading = source.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*(?:\r?\n|$)/);
+  const firstLine = source.match(/^\s*([^\r\n]+)\s*(?:\r?\n|$)/);
+  const headingMatchesTitle = Boolean(firstHeading && displayedTitle && normalizeComparableTitle(firstHeading[1]) === normalizeComparableTitle(displayedTitle));
+  const plainLineMatchesTitle = Boolean(!firstHeading && firstLine && displayedTitle && normalizeComparableTitle(firstLine[1]) === normalizeComparableTitle(displayedTitle));
+  const shouldStrip = Boolean(firstHeading && (stripFirstHeading || headingMatchesTitle)) || plainLineMatchesTitle;
+  const matchedPrefix = firstHeading?.[0] ?? (plainLineMatchesTitle ? firstLine?.[0] : undefined);
+  const content = shouldStrip && matchedPrefix
+    ? source.slice(matchedPrefix.length).replace(/^\s*\r?\n/, "")
     : source;
   const html = marked.parse(markdownWithLocalImages(content, assetUrls), { async: false, breaks: true, gfm: true }) as string;
   return DOMPurify.sanitize(html, {
