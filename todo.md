@@ -1,5 +1,6 @@
 # Publicação para teste — Caderno
 
+- [x] Garantir e validar que a supressão do primeiro título Markdown seja idêntica na prévia, montagem e prova PDF.
 - [x] Normalizar o primeiro heading Markdown para evitar duplicação com o título editorial do capítulo e publicar a correção.
 - [x] Diagnosticar a divergência entre prévia e PDF, incluindo trim, fonte, margens, paginação e propagação de configurações, sem implementar correções.
 - [x] Exibir uma prévia em tempo real de fólios, paridade e páginas de abertura antes da exportação PDF.

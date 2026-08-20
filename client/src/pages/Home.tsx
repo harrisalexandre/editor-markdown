@@ -305,6 +305,10 @@ function renderedMarkdown(source: string, assetUrls: Record<string, string>, dis
   });
 }
 
+function renderedChapterBody(chapter: Chapter, assetUrls: Record<string, string>) {
+  return renderedMarkdown(chapter.content, assetUrls, chapter.title, true);
+}
+
 const xmlEscape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 const epubSafePath = (value: string) => normalizePath(value).replace(/^(?:\.\.\/)+/, "").replace(/^\/+/, "");
 const epubFilename = (value: string) => (value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "livro");
@@ -314,7 +318,7 @@ const xhtmlize = (html: string) => html
   .replace(/<img\b([^>]*)>/gi, (_match, attributes) => `<img${String(attributes).replace(/\/\s*$/, "").trimEnd()} />`);
 
 function epubChapterMarkup(chapter: Chapter, imageHrefs: Record<string, string>) {
-  const content = xhtmlize(renderedMarkdown(chapter.content, imageHrefs, chapter.title, true));
+  const content = xhtmlize(renderedChapterBody(chapter, imageHrefs));
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="pt-BR" lang="pt-BR">
@@ -1044,7 +1048,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
                   <div className="proof-running-head"><span>{metadata.title}</span><span>prova de leitura</span></div>
                   <h1>{activeChapter?.title || "Capítulo sem título"}</h1>
                   <div className="proof-rule" />
-                  <div className={`markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedMarkdown(activeChapter?.content ?? "", assetUrls, activeChapter?.title, true) }} />
+                  <div className={`markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: activeChapter ? renderedChapterBody(activeChapter, assetUrls) : "" }} />
                 </article>
               </section>
             </div>
@@ -1239,7 +1243,7 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
           {group.chapters.map((chapter) => (
             <article className="book-page chapter-page" key={chapter.id}>
               {settings.includeHeader && <div className="print-running-head"><span>{metadata.title}</span><span>{group.act}</span></div>}
-              <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className={`book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedMarkdown(chapter.content, assetUrls, chapter.title, true) }} /></div>
+              <div className="book-page-content"><span className="book-label">{group.act}</span><h2>{chapter.title}</h2><div className="chapter-mark" /><div className={`book-markdown markdown-body ${settings.dropCapEnabled ? "has-drop-cap" : ""}`} dangerouslySetInnerHTML={{ __html: renderedChapterBody(chapter, assetUrls) }} /></div>
               {renderFolio(settings.romanFrontMatter && (groupIsPreTextual || isPreTextual(group.act, chapter.title)) ? "roman" : "arabic", settings.hideChapterInitialFolios)}
             </article>
           ))}
