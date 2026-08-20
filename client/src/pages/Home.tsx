@@ -57,6 +57,7 @@ type Tab = "editar" | "montar" | "configurar";
 type ExportScope = "livro" | "capitulo" | "ato";
 type PageFormat = "A4" | "A5" | "Carta" | "Custom";
 type PageNumberPosition = "footer-center" | "footer-left" | "footer-right" | "header-left" | "header-center" | "header-right";
+type RomanNumeralCase = "upper" | "lower";
 
 type Chapter = {
   id: string;
@@ -90,6 +91,7 @@ type PrintSettings = {
   startChaptersOnRecto: boolean;
   parityFolios: boolean;
   romanFrontMatter: boolean;
+  romanNumeralCase: RomanNumeralCase;
   bodyFont: "Source Serif 4" | "Georgia" | "Merriweather";
   titleFont: "Playfair Display" | "Cormorant Garamond" | "Georgia";
   fontSize: number;
@@ -144,6 +146,7 @@ const defaultPrintSettings: PrintSettings = {
   startChaptersOnRecto: true,
   parityFolios: true,
   romanFrontMatter: true,
+  romanNumeralCase: "lower",
   bodyFont: "Source Serif 4",
   titleFont: "Playfair Display",
   fontSize: 11.5,
@@ -304,14 +307,15 @@ function groupChapters(chapters: Chapter[]) {
   return groups;
 }
 
-const toRoman = (value: number) => {
+const toRoman = (value: number, numeralCase: RomanNumeralCase) => {
   const units: [number, string][] = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
   let remaining = Math.max(1, value);
-  return units.map(([amount, symbol]) => {
+  const result = units.map(([amount, symbol]) => {
     const count = Math.floor(remaining / amount);
     remaining %= amount;
     return symbol.repeat(count);
-  }).join("").toLowerCase();
+  }).join("");
+  return numeralCase === "lower" ? result.toLowerCase() : result;
 };
 
 const isPreTextual = (act: string, title = "") => /introdu[cç][aã]o|pref[aá]cio|apresenta[cç][aã]o|dedicat[oó]ria|agradecimento|nota do autor/i.test(`${act} ${title}`);
@@ -1038,7 +1042,7 @@ img { max-width: 100%; height: auto; } .title-page { text-align: center; } .titl
                 <Field label="Inferior (mm)"><Input type="number" value={settings.marginBottom} onChange={(event) => setSettings((current) => ({ ...current, marginBottom: Number(event.target.value) || 0 }))} /></Field>
                 <Field label="Laterais (mm)"><Input type="number" value={settings.marginSide} onChange={(event) => setSettings((current) => ({ ...current, marginSide: Number(event.target.value) || 0 }))} /></Field>
               </div>
-              <div className="print-parity-controls"><SwitchField label="Margens espelhadas" description="Gutter maior no lado interno de cada página impressa" checked={settings.mirroredMargins} onCheckedChange={(mirroredMargins) => setSettings((current) => ({ ...current, mirroredMargins }))} />{settings.mirroredMargins && <RangeField label="Gutter interno" value={settings.gutterMargin} min={0} max={15} step={1} suffix=" mm" onChange={(gutterMargin) => setSettings((current) => ({ ...current, gutterMargin }))} />}<SwitchField label="Capítulo no recto" description="Força a abertura de cada capítulo em página ímpar" checked={settings.startChaptersOnRecto} onCheckedChange={(startChaptersOnRecto) => setSettings((current) => ({ ...current, startChaptersOnRecto }))} /><SwitchField label="Fólio por paridade" description="Posiciona o número na margem externa de páginas pares e ímpares" checked={settings.parityFolios} onCheckedChange={(parityFolios) => setSettings((current) => ({ ...current, parityFolios }))} /></div>
+              <div className="print-parity-controls"><SwitchField label="Margens espelhadas" description="Gutter maior no lado interno de cada página impressa" checked={settings.mirroredMargins} onCheckedChange={(mirroredMargins) => setSettings((current) => ({ ...current, mirroredMargins }))} />{settings.mirroredMargins && <RangeField label="Gutter interno" value={settings.gutterMargin} min={0} max={15} step={1} suffix=" mm" onChange={(gutterMargin) => setSettings((current) => ({ ...current, gutterMargin }))} />}<SwitchField label="Capítulo no recto" description="Força a abertura de cada capítulo em página ímpar" checked={settings.startChaptersOnRecto} onCheckedChange={(startChaptersOnRecto) => setSettings((current) => ({ ...current, startChaptersOnRecto }))} /><SwitchField label="Fólio por paridade" description="Posiciona o número na margem externa de páginas pares e ímpares" checked={settings.parityFolios} onCheckedChange={(parityFolios) => setSettings((current) => ({ ...current, parityFolios }))} />{settings.romanFrontMatter && <Field label="Fólios romanos"><Select value={settings.romanNumeralCase} onValueChange={(romanNumeralCase: RomanNumeralCase) => setSettings((current) => ({ ...current, romanNumeralCase }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="lower">Minúsculos · i, ii, iii</SelectItem><SelectItem value="upper">Maiúsculos · I, II, III</SelectItem></SelectContent></Select></Field>}</div>
               </section>
 
               <section className="settings-card">
@@ -1144,7 +1148,7 @@ function BookPages({ metadata, groups, settings, assetUrls, coverUrl, className 
   const renderFolio = (series: "roman" | "arabic") => {
     if (!settings.includeNumbers) return null;
     const parity = settings.parityFolios ? (physicalPageIndex % 2 === 0 ? "folio-verso" : "folio-recto") : "";
-    const value = series === "roman" ? toRoman(romanPageIndex++) : arabicPageIndex++;
+    const value = series === "roman" ? toRoman(romanPageIndex++, settings.romanNumeralCase) : arabicPageIndex++;
     physicalPageIndex += 1;
     return <div className={`page-number ${settings.pageNumberPosition} ${parity} folio-${series}`}>{value}</div>;
   };

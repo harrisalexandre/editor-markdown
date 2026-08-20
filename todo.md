@@ -1,5 +1,6 @@
 # Publicação para teste — Caderno
 
+- [x] Permitir escolher algarismos romanos maiúsculos ou minúsculos nos fólios pré-textuais.
 - [x] Exibir fólios romanos no sumário e introdução, com reinício arábico no corpo do livro impresso.
 - [x] Implementar margens interna/externa espelhadas, início de capítulo no recto e numeração de página por paridade na impressão PDF.
 - [x] Revisar e corrigir as regras de impressão para que capítulos longos fluam entre páginas sem corte de texto.
